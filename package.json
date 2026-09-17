@@ -2,6 +2,7 @@
   "name": "sql-optima-action",
   "version": "1.0.0",
   "description": "Automated SQL performance analyzer & optimization engine for GitHub Actions",
+  "license": "SEE LICENSE IN LICENSE",
   "main": "dist/index.js",
   "scripts": {
     "build": "ncc build src/index.js -o dist --source-map --license licenses.txt",

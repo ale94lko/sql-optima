@@ -2,7 +2,7 @@
 
 [![Health Score](https://raw.githubusercontent.com/ale94lko/sql-optima/output/badge.svg)](https://github.com/ale94lko/sql-optima/community)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-SQL%20Optima%20Action-blue?style=flat-square&logo=github)](https://github.com/marketplace/actions/sql-optima-action)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+[![License: Source-Available (AI restricted)](https://img.shields.io/badge/License-Source--Available-blue.svg?style=flat-square)](LICENSE)
 [![Node.js CI](https://img.shields.io/badge/node.js-20.x-green?style=flat-square&logo=node.js)](https://nodejs.org/)
 
 An automated **SQL performance analyzer, schema linter, and query execution optimizer** built for GitHub Actions.
@@ -187,4 +187,6 @@ Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-This project is licensed under the MIT License.
+**sql-optima** is source-available under the terms in [`LICENSE`](LICENSE): use, modification, and distribution are allowed, but using this software or its documentation to train, fine-tune, evaluate, or synthesize AI/ML/LLM systems requires a separate paid written agreement with the copyright holder.
+
+> **Note:** GitHub may not detect this custom license as an SPDX identifier. That can temporarily affect Marketplace listing checks and the community-profile “license” checklist item; the health-score badge workflow should be re-checked after merge.
