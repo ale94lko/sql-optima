@@ -3,6 +3,18 @@
  */
 
 /**
+ * Escape text for use inside a GitHub Markdown table cell.
+ * Backslashes first, then pipes, so escaped pipes stay intact.
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeMarkdownTableCell(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|');
+}
+
+/**
  * Generates a GitHub Step Summary Markdown string.
  *
  * @param {Object} options
@@ -85,9 +97,9 @@ function generateMarkdownReport({ engine, sqlContent, staticIssues = [], dynamic
 
     allIssues.forEach((issue) => {
       const badge = getSeverityBadge(issue.severity);
-      const message = issue.message.replace(/\|/g, '\\|'); // Escape table pipes
+      const message = escapeMarkdownTableCell(issue.message);
       const suggestion = issue.suggestion
-        ? `<br>👉 *${issue.suggestion.replace(/\|/g, '\\|')}*`
+        ? `<br>👉 *${escapeMarkdownTableCell(issue.suggestion)}*`
         : '';
 
       markdown += `| ${badge} | \`${issue.type}\` | ${message}${suggestion} |\n`;
@@ -110,4 +122,5 @@ function generateMarkdownReport({ engine, sqlContent, staticIssues = [], dynamic
 
 module.exports = {
   generateMarkdownReport,
+  escapeMarkdownTableCell,
 };

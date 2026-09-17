@@ -83,10 +83,16 @@ jobs:
 
       - name: actionlint
         shell: bash
+        env:
+          ACTIONLINT_VERSION: '1.7.12'
+          ACTIONLINT_LINUX_AMD64_SHA256: '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
         run: |
-          bash <(curl --proto '=https' --tlsv1.2 -fsSL \
-            https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) \
-            1.7.12
+          set -euo pipefail
+          ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$ARCHIVE" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${ARCHIVE}"
+          echo "${ACTIONLINT_LINUX_AMD64_SHA256}  ${ARCHIVE}" | sha256sum -c -
+          tar -xzf "$ARCHIVE" actionlint
           ./actionlint -color
 
   integration-postgres:

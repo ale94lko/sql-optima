@@ -20,6 +20,25 @@ describe('generateMarkdownReport', () => {
     expect(report).toContain('SELECT id FROM users;');
   });
 
+  it('escapes backslashes and pipes in table cells', () => {
+    const report = generateMarkdownReport({
+      engine: 'postgres',
+      sqlContent: 'SELECT 1;',
+      staticIssues: [
+        {
+          type: 'NOTE',
+          severity: 'INFO',
+          message: 'path\\with|pipes',
+          suggestion: 'use\\safe|text',
+        },
+      ],
+      dynamicResult: { executed: false, issues: [] },
+    });
+
+    expect(report).toContain('path\\\\with\\|pipes');
+    expect(report).toContain('use\\\\safe\\|text');
+  });
+
   it('renders severity badges, escaped pipes, and dynamic metrics', () => {
     const report = generateMarkdownReport({
       engine: 'mysql',
