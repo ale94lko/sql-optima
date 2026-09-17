@@ -54,3 +54,18 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update major floating tag (e.g. v1)
+        run: |
+          TAG="${{ github.ref_name }}"
+          case "$TAG" in
+            v*.*.*) ;;
+            *)
+              echo "Skipping major tag update for non-semver tag: $TAG"
+              exit 0
+              ;;
+          esac
+          MAJOR="${TAG%%.*}"
+          git tag -f "$MAJOR" "$TAG"
+          git push origin "refs/tags/$MAJOR" --force
+          echo "Updated floating tag $MAJOR -> $TAG"

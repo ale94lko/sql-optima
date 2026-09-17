@@ -4,6 +4,31 @@
   "description": "Automated SQL performance analyzer & optimization engine for GitHub Actions",
   "license": "SEE LICENSE IN LICENSE",
   "main": "dist/index.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ale94lko/sql-optima.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ale94lko/sql-optima/issues"
+  },
+  "homepage": "https://github.com/ale94lko/sql-optima#readme",
+  "keywords": [
+    "github-actions",
+    "sql",
+    "linter",
+    "optimizer",
+    "performance",
+    "postgres",
+    "mysql",
+    "mariadb",
+    "sqlite",
+    "mssql",
+    "explain",
+    "schema"
+  ],
   "scripts": {
     "build": "ncc build src/index.js -o dist --license licenses.txt && node scripts/copy-sqljs-wasm.js",
     "lint": "eslint .",

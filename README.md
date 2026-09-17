@@ -18,7 +18,25 @@ An automated **SQL performance analyzer, schema linter, and query execution opti
 - **Static AST Analysis:** Inspects SQL syntax without needing a live database to detect missing primary keys, unindexed foreign key candidates, `SELECT *` usages, and leading wildcard `LIKE` queries.
 - **Dynamic Execution Analysis:** Runs engine-specific explain plans (`EXPLAIN` / `EXPLAIN QUERY PLAN` / `SHOWPLAN_ALL`) against live or in-memory databases. Schema statements (`CREATE` / `INSERT` / …) in `sql_content` are applied before EXPLAIN for Postgres, MySQL/MariaDB, SQLite, and SQL Server.
 - **Dual Triggering:** Supports execution via standard workflow inputs or directly through external API calls (`repository_dispatch`).
-- **GitHub Step Summaries:** Publishes markdown reports directly to `$GITHUB_STEP_SUMMARY` and Pull Request checks.
+- **GitHub Step Summaries:** Publishes markdown reports to `$GITHUB_STEP_SUMMARY` and Action outputs (`report`, `issue_count`, `highest_severity`). Inline PR review comments are intentionally not posted (keeps default token permissions lean); consume outputs or the Step Summary in your workflow instead.
+
+---
+
+## Versioning (Marketplace)
+
+Consumers should pin a floating major tag for convenience:
+
+```yaml
+uses: ale94lko/sql-optima@v1
+```
+
+Release process:
+
+1. Push a semver tag such as `v1.2.3` (triggers [`.github/workflows/release.yml`](.github/workflows/release.yml)).
+2. The release workflow rebuilds `dist/`, creates the GitHub Release, and **force-updates** the major floating tag (`v1` → that release).
+3. Breaking changes bump the major (`v2.0.0`) and introduce a new floating tag (`v2`).
+
+Prefer SHA-pinning in high-assurance workflows; use `@v1` for Marketplace-style examples.
 
 ---
 
@@ -283,6 +301,8 @@ See the full sample at [`examples/workflows/severity-gate.yml`](examples/workflo
 ## Local Development & Building
 
 To build and compile the distribution bundle locally:
+
+Requires **Node.js 24+** (`engines.node` in `package.json`; matches Action `runs.using: node24` and CI).
 
 ```bash
 # Clone the repository
