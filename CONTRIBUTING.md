@@ -4,7 +4,7 @@ Thanks for helping improve this GitHub Action. Please also read the [Code of Con
 
 ## Development setup
 
-Requires Node.js 20+.
+Requires Node.js 24+.
 
 ```bash
 git clone https://github.com/ale94lko/sql-optima.git
@@ -36,7 +36,7 @@ PR and `main` pushes run [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 
 Security / supply-chain (separate workflows):
 
-- [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) — CodeQL for JavaScript
+- GitHub **CodeQL** default code scanning (config: [`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml); avoids conflicting with an advanced workflow)
 - [`.github/workflows/scorecard.yml`](.github/workflows/scorecard.yml) — OpenSSF Scorecard
 
 Tag releases stay on [`.github/workflows/release.yml`](.github/workflows/release.yml) (`contents: write` only on that job). Manual / API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml) (`repository_dispatch` / `workflow_dispatch` only).
