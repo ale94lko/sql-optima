@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - OpenSSF Best Practices badge ([project 14693](https://www.bestpractices.dev/projects/14693)).
+- Governance, architecture, roadmap, assurance case, and achievements docs for Silver-level Best Practices.
+- CONTRIBUTING: DCO sign-off, coding standards, mandatory tests for major features.
+- SECURITY: advisory preferred path, response SLA, reporter credit policy.
 
 ## [1.0.0] - 2026-09-17
 

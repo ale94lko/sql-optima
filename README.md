@@ -10,6 +10,23 @@ An automated **SQL performance analyzer, schema linter, and query execution opti
 
 `sql-optima` parses raw SQL code or schema files, identifies structural anti-patterns (e.g., missing primary keys or unindexed foreign keys), connects to ephemeral database containers (PostgreSQL / MySQL / MariaDB / SQL Server) or an in-memory SQLite engine, and evaluates query execution plans (`EXPLAIN` / `SHOWPLAN`) to flag sequential scans, disk sorts, and full table scans. BigQuery and Snowflake are supported for **static dialect linting** only.
 
+### Quick start
+
+```yaml
+- uses: actions/checkout@v4
+- uses: ale94lko/sql-optima@v1
+  with:
+    engine: postgres
+    sql_file: examples/mixed_postgres.sql
+    db_host: localhost
+    db_port: '5432'
+    db_name: test_db
+    db_user: postgres
+    db_password: root
+```
+
+More engines, inputs, and samples: see [Usage](#usage) below. Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md). Achievements: [docs/ACHIEVEMENTS.md](docs/ACHIEVEMENTS.md).
+
 ---
 
 ## Key Features

@@ -10,8 +10,10 @@ report it to me as described below.
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please report them to me by sending an email to
-[ale94lko@gmail.com](mailto:ale94lko@gmail.com).
+Instead, please report them using one of:
+
+1. [GitHub Security Advisories](https://github.com/ale94lko/sql-optima/security/advisories/new) (preferred for private discussion), or
+2. Email [ale94lko@gmail.com](mailto:ale94lko@gmail.com)
 
 Please include the requested information listed below (as much as you can
 provide) to help me better understand the nature and scope of the possible
@@ -27,6 +29,21 @@ issue:
 
 This information will help me triage your report more quickly.
 
+## Response process
+
+1. Acknowledge receipt within **7 days**.
+2. Triage severity and confirm reproducibility.
+3. Develop and test a fix on a private branch when needed.
+4. Coordinate disclosure timing with the reporter.
+5. Publish a fix release and credit the reporter in the GitHub Security Advisory
+   and/or [CHANGELOG.md](CHANGELOG.md), unless anonymity is requested.
+
+## Credit
+
+Reporters of confirmed vulnerabilities resolved in the last 12 months are
+credited in the advisory and release notes unless they ask to remain anonymous.
+If no vulnerabilities have been resolved in that window, there are no credits to list.
+
 ## Preferred Languages
 
 We prefer all communications to be in English or Spanish.
@@ -34,3 +51,8 @@ We prefer all communications to be in English or Spanish.
 ## Policy
 
 We follow the principle of [Coordinated Vulnerability Disclosure](https://www.iso.org/standard/72311.html).
+
+## What users can expect
+
+See [docs/ASSURANCE.md](docs/ASSURANCE.md) for the security requirements,
+threat model, and assurance case.

@@ -1,6 +1,18 @@
 # Contributing to sql-optima
 
-Thanks for helping improve this GitHub Action. Please also read the [Code of Conduct](.github/CODE_OF_CONDUCT.md).
+Thanks for helping improve this GitHub Action. Please also read the [Code of Conduct](.github/CODE_OF_CONDUCT.md) and [GOVERNANCE.md](GOVERNANCE.md).
+
+## Developer Certificate of Origin (DCO)
+
+All non-trivial contributions must be submitted under the
+[Developer Certificate of Origin](https://developercertificate.org/).
+Sign your commits with:
+
+```bash
+git commit -s -m "Your message"
+```
+
+Pull requests without a `Signed-off-by:` line may be asked to amend before merge.
 
 ## Development setup
 
@@ -11,6 +23,22 @@ git clone https://github.com/ale94lko/sql-optima.git
 cd sql-optima
 npm ci
 ```
+
+This installs dependencies and is enough to run tests and rebuild `dist/`.
+
+## Coding standards
+
+- JavaScript style is enforced by **ESLint** (`eslint.config.js`).
+- Run `npm run lint` locally; CI fails on lint errors.
+- Prefer small, focused PRs; match existing patterns in `src/`.
+
+## Testing policy (required)
+
+As major new functionality is added, **automated tests MUST be added** to the
+Vitest suite (`npm test` / `npm run test:coverage`). Pull requests that change
+behavior without tests should explain why coverage is deferred and will usually
+be asked to add tests before merge. Target **≥80% statement coverage** on `src/`
+(currently measured with `@vitest/coverage-v8`).
 
 ## Quality checks
 
@@ -48,9 +76,10 @@ Workflows use least-privilege `permissions:` and SHA-pinned Actions with `# vX.Y
 ## Pull requests
 
 1. Fork the repository and create a focused branch.
-2. Keep changes small: one feature or fix per PR, with tests that pin the new behavior.
-3. Link the PR to the related issue when applicable.
-4. Fill out the pull request template.
+2. Sign off commits (DCO) with `git commit -s`.
+3. Keep changes small: one feature or fix per PR, with tests that pin the new behavior.
+4. Link the PR to the related issue when applicable.
+5. Fill out the pull request template.
 
 ## Dependabot updates
 
