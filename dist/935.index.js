@@ -394,7 +394,7 @@ const execFile = (0,external_node_util_.promisify)(external_node_child_process_.
 
 // Path to included `xdg-open`.
 const open_dirname = external_node_path_.dirname((0,external_node_url_.fileURLToPath)(require("url").pathToFileURL(__filename).href));
-const localXdgOpenPath = external_node_path_.join(open_dirname, 'xdg-open');
+const localXdgOpenPath = __webpack_require__.ab + "xdg-open";
 
 const {platform, arch} = external_node_process_;
 
@@ -591,7 +591,7 @@ const baseOpen = async options => {
 			// Check if local `xdg-open` exists and is executable.
 			let exeLocalXdgOpen = false;
 			try {
-				await promises_.access(localXdgOpenPath, promises_.constants.X_OK);
+				await promises_.access(__webpack_require__.ab + "xdg-open", promises_.constants.X_OK);
 				exeLocalXdgOpen = true;
 			} catch {}
 
@@ -750,4 +750,3 @@ defineLazyProperty(apps, 'browserPrivate', () => 'browserPrivate');
 
 };
 ;
-//# sourceMappingURL=935.index.js.map

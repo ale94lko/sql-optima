@@ -15,12 +15,33 @@ npm ci
 ## Quality checks
 
 ```bash
+npm run lint
 npm test
 npm run test:coverage
 npm run build
 ```
 
-After changing `src/` or lockfile dependencies, commit the rebuilt `dist/` in the same change. Consumers run the Action from `dist/index.js` without installing npm dependencies on their runners.
+After changing `src/` or lockfile dependencies, commit the rebuilt `dist/` in the same change. Consumers run the Action from `dist/index.js` without installing npm dependencies on their runners. CI fails if `dist/` is stale (`git diff --exit-code dist` in the build job).
+
+## Continuous integration
+
+PR and `main` pushes run [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+
+| Job | Purpose |
+| :--- | :--- |
+| `unit` | Vitest + coverage (no database services) |
+| `build` | `ncc` bundle + assert committed `dist/` is current |
+| `lint` | ESLint (`npm run lint`) + [actionlint](https://github.com/rhysd/actionlint) for workflows |
+| `integration-*` | Live Action runs against Postgres, MySQL, MariaDB, SQLite, SQL Server, and static BigQuery/Snowflake samples |
+
+Security / supply-chain (separate workflows):
+
+- [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) — CodeQL for JavaScript
+- [`.github/workflows/scorecard.yml`](.github/workflows/scorecard.yml) — OpenSSF Scorecard
+
+Tag releases stay on [`.github/workflows/release.yml`](.github/workflows/release.yml) (`contents: write` only on that job). Manual / API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml) (`repository_dispatch` / `workflow_dispatch` only).
+
+Workflows use least-privilege `permissions:` and SHA-pinned Actions with `# vX.Y.Z` comments.
 
 ## Pull requests
 
@@ -35,7 +56,7 @@ Dependabot opens weekly PRs for npm dependencies and GitHub Actions (see [`.gith
 
 Review flow:
 
-1. Confirm CI on the Dependabot PR is green (`test.yml` jobs).
+1. Confirm CI on the Dependabot PR is green (`ci.yml` jobs: unit, build, lint, integrations).
 2. For **npm** PRs: skim the changelog / release notes for breaking changes; major bumps stay ungrouped so they land alone. After merging dependency changes that affect the runtime bundle, rebuild and commit `dist/` if the PR did not already include it.
 3. For **Actions** PRs: prefer keeping `uses:` lines SHA-pinned with a `# vX.Y.Z` comment (Dependabot updates both). Reject unpinned mutable tags in new workflow steps.
 4. Squash-merge when ready; close or comment if an update should be deferred.

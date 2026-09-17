@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*.*.*'
 
+# Default deny; the release job elevates only what it needs.
+permissions: {}
+
 jobs:
   release:
     name: Build, Commit Dist & Create Release

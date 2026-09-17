@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# Generated Action bundle
+dist/** linguist-generated=true
