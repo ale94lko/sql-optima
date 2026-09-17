@@ -106,6 +106,26 @@ describe('analyzeStaticSQL', () => {
     expect(issues.some((issue) => issue.type === 'MISSING_PRIMARY_KEY')).toBe(true);
   });
 
+  it('supports the mssql / T-SQL dialect', () => {
+    const issues = analyzeStaticSQL('CREATE TABLE t (name VARCHAR(10));', 'mssql');
+
+    expect(issues.some((issue) => issue.type === 'MISSING_PRIMARY_KEY')).toBe(true);
+  });
+
+  it('supports BigQuery static dialect linting', () => {
+    const issues = analyzeStaticSQL('SELECT * FROM dataset.users;', 'bigquery');
+
+    expect(issues.some((issue) => issue.type === 'WILDCARD_SELECT' || issue.type === 'SYNTAX_ERROR')).toBe(
+      true,
+    );
+  });
+
+  it('supports Snowflake static dialect linting', () => {
+    const issues = analyzeStaticSQL('SELECT * FROM users;', 'snowflake');
+
+    expect(issues.some((issue) => issue.type === 'WILDCARD_SELECT')).toBe(true);
+  });
+
   it('ignores non-create/select statements without failing', () => {
     const issues = analyzeStaticSQL('DROP TABLE IF EXISTS users;');
 

@@ -10,9 +10,11 @@ async function run(overrides = {}) {
   const PostgresAnalyzer = overrides.PostgresAnalyzer || require('./db/postgres');
   const MySQLAnalyzer = overrides.MySQLAnalyzer || require('./db/mysql');
   const SqliteAnalyzer = overrides.SqliteAnalyzer || require('./db/sqlite');
+  const MssqlAnalyzer = overrides.MssqlAnalyzer || require('./db/mssql');
   const { generateMarkdownReport } =
     overrides.formatter || require('./formatter');
-  const { resolveEngineDefaults } = overrides.sqlUtils || require('./sqlUtils');
+  const sqlUtils = overrides.sqlUtils || require('./sqlUtils');
+  const { resolveEngineDefaults, isStaticOnlyEngine } = sqlUtils;
 
   let dbAnalyzer = null;
 
@@ -49,7 +51,7 @@ async function run(overrides = {}) {
       port: parseInt(core.getInput('db_port') || defaults.port, 10),
       database: core.getInput('db_name') || 'test_db',
       user: core.getInput('db_user') || defaults.user,
-      password: core.getInput('db_password') || 'root',
+      password: core.getInput('db_password') || defaults.password || 'root',
     };
 
     // 5. Select and initialize the DB analyzer engine
@@ -66,6 +68,14 @@ async function run(overrides = {}) {
       dbAnalyzer = new MySQLAnalyzer(dbConfig);
     } else if (engine === 'sqlite' || engine === 'sqlite3') {
       dbAnalyzer = new SqliteAnalyzer(dbConfig);
+    } else if (
+      engine === 'mssql' ||
+      engine === 'sqlserver' ||
+      engine === 'sql-server' ||
+      engine === 'transactsql' ||
+      engine === 'tsql'
+    ) {
+      dbAnalyzer = new MssqlAnalyzer(dbConfig);
     }
 
     // 6. Execute Dynamic Analysis if a supported engine analyzer is available
@@ -75,7 +85,7 @@ async function run(overrides = {}) {
       try {
         core.info(`Connecting to ${engine.toUpperCase()} database service...`);
         await dbAnalyzer.testConnection();
-        core.info('Connection established. Executing EXPLAIN...');
+        core.info('Connection established. Executing EXPLAIN / SHOWPLAN...');
 
         dynamicResult = await dbAnalyzer.analyzeQuery(sqlContent);
       } catch (dbError) {
@@ -86,6 +96,13 @@ async function run(overrides = {}) {
           issues: [],
         };
       }
+    } else if (isStaticOnlyEngine(engine)) {
+      dynamicResult = {
+        executed: false,
+        reason: `Engine "${engine}" supports static dialect linting only (no live EXPLAIN adapter yet).`,
+        issues: [],
+      };
+      core.info(dynamicResult.reason);
     } else {
       dynamicResult = {
         executed: false,

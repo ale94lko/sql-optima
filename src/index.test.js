@@ -12,9 +12,11 @@ describe('run', () => {
   let postgresAnalyzer;
   let mysqlAnalyzer;
   let sqliteAnalyzer;
+  let mssqlAnalyzer;
   let PostgresAnalyzer;
   let MySQLAnalyzer;
   let SqliteAnalyzer;
+  let MssqlAnalyzer;
 
   beforeEach(() => {
     analyzeStaticSQL = vi.fn().mockReturnValue([{ type: 'WILDCARD_SELECT' }]);
@@ -35,6 +37,11 @@ describe('run', () => {
       analyzeQuery: vi.fn().mockResolvedValue({ executed: true, issues: [] }),
       close: vi.fn().mockResolvedValue(undefined),
     };
+    mssqlAnalyzer = {
+      testConnection: vi.fn().mockResolvedValue(true),
+      analyzeQuery: vi.fn().mockResolvedValue({ executed: true, issues: [] }),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
 
     PostgresAnalyzer = vi.fn(function MockPostgresAnalyzer() {
       return postgresAnalyzer;
@@ -44,6 +51,9 @@ describe('run', () => {
     });
     SqliteAnalyzer = vi.fn(function MockSqliteAnalyzer() {
       return sqliteAnalyzer;
+    });
+    MssqlAnalyzer = vi.fn(function MockMssqlAnalyzer() {
+      return mssqlAnalyzer;
     });
 
     core = {
@@ -86,6 +96,7 @@ describe('run', () => {
       PostgresAnalyzer,
       MySQLAnalyzer,
       SqliteAnalyzer,
+      MssqlAnalyzer,
       ...extra,
     };
   }
@@ -191,9 +202,53 @@ describe('run', () => {
     expect(PostgresAnalyzer).toHaveBeenCalled();
   });
 
+  it('runs mssql analysis with SQL Server defaults', async () => {
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'mssql';
+      if (name === 'sql_content') return 'SELECT 1;';
+      return '';
+    });
+
+    await run(deps());
+
+    expect(MssqlAnalyzer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        port: 1433,
+        user: 'sa',
+      }),
+    );
+    expect(mssqlAnalyzer.testConnection).toHaveBeenCalled();
+    expect(mssqlAnalyzer.analyzeQuery).toHaveBeenCalled();
+    expect(mssqlAnalyzer.close).toHaveBeenCalled();
+  });
+
+  it('runs BigQuery as static-only without opening a database connection', async () => {
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'bigquery';
+      if (name === 'sql_content') return 'SELECT 1;';
+      return '';
+    });
+
+    await run(deps());
+
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT 1;', 'bigquery');
+    expect(generateMarkdownReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dynamicResult: expect.objectContaining({
+          executed: false,
+          reason: expect.stringContaining('static dialect linting only'),
+        }),
+      }),
+    );
+    expect(PostgresAnalyzer).not.toHaveBeenCalled();
+    expect(MySQLAnalyzer).not.toHaveBeenCalled();
+    expect(SqliteAnalyzer).not.toHaveBeenCalled();
+    expect(MssqlAnalyzer).not.toHaveBeenCalled();
+  });
+
   it('reports unsupported engines without opening a database connection', async () => {
     core.getInput.mockImplementation((name) => {
-      if (name === 'engine') return 'snowflake';
+      if (name === 'engine') return 'oracle';
       if (name === 'sql_content') return 'SELECT 1;';
       return '';
     });
@@ -204,13 +259,14 @@ describe('run', () => {
       expect.objectContaining({
         dynamicResult: expect.objectContaining({
           executed: false,
-          reason: expect.stringContaining('snowflake'),
+          reason: expect.stringContaining('oracle'),
         }),
       }),
     );
     expect(PostgresAnalyzer).not.toHaveBeenCalled();
     expect(MySQLAnalyzer).not.toHaveBeenCalled();
     expect(SqliteAnalyzer).not.toHaveBeenCalled();
+    expect(MssqlAnalyzer).not.toHaveBeenCalled();
   });
 
   it('marks the action as failed when summary writing throws', async () => {
