@@ -36,7 +36,9 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "github-actions[bot]"
+          # JS bundle is tracked; WASM is gitignored on main but must ship on release tags.
           git add dist/
+          git add -f dist/sql-wasm.wasm
           if ! git diff-index --quiet HEAD; then
             git commit -m "build: update dist bundle for release ${{ github.ref_name }}"
             git push origin HEAD:${{ github.ref }}

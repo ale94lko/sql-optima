@@ -53,9 +53,13 @@ jobs:
 
       - name: Build Action bundle and assert dist/ is current
         run: |
-          # Ignore executable-bit noise on copied wasm/binaries across hosts.
+          # Ignore executable-bit noise on copied binaries across hosts.
           git config core.fileMode false
           npm run build
+          if [ ! -f dist/sql-wasm.wasm ]; then
+            echo "::error::dist/sql-wasm.wasm was not generated. Check scripts/copy-sqljs-wasm.js."
+            exit 1
+          fi
           if ! git diff --exit-code -- dist; then
             echo "::error::dist/ is out of date. Run npm run build and commit the result."
             git diff --stat -- dist || true

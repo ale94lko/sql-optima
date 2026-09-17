@@ -21,7 +21,9 @@ npm run test:coverage
 npm run build
 ```
 
-After changing `src/` or lockfile dependencies, commit the rebuilt `dist/` in the same change. Consumers run the Action from `dist/index.js` without installing npm dependencies on their runners. CI fails if `dist/` is stale (`git diff --exit-code dist` in the build job).
+After changing `src/` or lockfile dependencies, commit the rebuilt `dist/` JS bundle in the same change. Consumers run the Action from `dist/index.js` without installing npm dependencies on their runners. CI fails if tracked `dist/` files are stale (`git diff --exit-code dist` in the build job).
+
+`dist/sql-wasm.wasm` is **generated** by `npm run build` (copied from `sql.js`) and is gitignored on `main` to keep OpenSSF Scorecard Binary-Artifacts clean. The release workflow force-adds the wasm onto version tags so `uses: ale94lko/sql-optima@v1` still ships a complete Action. Local/CI jobs that use `uses: ./` must run `npm run build` first (integration jobs already do).
 
 ## Continuous integration
 

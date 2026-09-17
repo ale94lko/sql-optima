@@ -317,7 +317,8 @@ npm run lint
 npm test
 npm run test:coverage
 
-# Compile source files into dist/index.js (commit dist/ when src/ or deps change)
+# Compile source files into dist/index.js (commit dist/ JS when src/ or deps change).
+# dist/sql-wasm.wasm is generated here and gitignored on main; release tags ship it.
 npm run build
 ```
 
