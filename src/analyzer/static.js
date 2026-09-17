@@ -1,19 +1,18 @@
 const { Parser } = require('node-sql-parser');
+const { resolveParserDialect } = require('../sqlUtils');
 
 /**
  * Performs static AST analysis on raw SQL content.
  * Identifies potential schema flaws, anti-patterns, and missing optimization targets.
  *
  * @param {string} sqlContent - Raw SQL query or schema definition string.
- * @param {string} engine - Target SQL engine ('postgres' | 'mysql').
+ * @param {string} engine - Target SQL engine ('postgres' | 'mysql' | 'mariadb' | 'sqlite' | ...).
  * @returns {Array<Object>} List of issue objects containing type, severity, message, and suggestion.
  */
 function analyzeStaticSQL(sqlContent, engine = 'postgres') {
   const parser = new Parser();
   const issues = [];
-
-  // Map engine to node-sql-parser dialect format
-  const dialect = engine === 'postgres' || engine === 'postgresql' ? 'postgresql' : 'mysql';
+  const dialect = resolveParserDialect(engine);
 
   try {
     // Parse SQL string into AST (handles single or multiple statements)

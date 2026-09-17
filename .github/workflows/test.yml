@@ -16,7 +16,6 @@ jobs:
     name: Run SQL Optima against PostgreSQL
     runs-on: ubuntu-latest
 
-    # Ephemeral PostgreSQL container service for dynamic EXPLAIN checks
     services:
       postgres:
         image: postgres:16-alpine
@@ -48,7 +47,6 @@ jobs:
           npm run test:coverage
           npm run build
 
-      # Seed tables required for dynamic EXPLAIN on the sample SELECT statements
       - name: Prepare database schema
         env:
           PGPASSWORD: root
@@ -64,7 +62,6 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-      # Analyze checked-in sample SQL (static + dynamic findings in Step Summary)
       - name: Run SQL Optima (sample fixtures)
         uses: ./
         with:
@@ -76,7 +73,6 @@ jobs:
           db_password: 'root'
           sql_content: ${{ steps.sample.outputs.sql }}
 
-      # repository_dispatch client_payload fallback
       - name: Run SQL Optima (API Payload Simulation)
         if: github.event_name == 'repository_dispatch'
         uses: ./
@@ -88,3 +84,80 @@ jobs:
           db_user: 'postgres'
           db_password: 'root'
           sql_content: ${{ github.event.client_payload.sql_code }}
+
+  test-sqlite-analysis:
+    name: Run SQL Optima against SQLite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: |
+          npm ci
+          npm run build
+      - name: Load mixed SQLite sample
+        id: sample
+        shell: bash
+        run: |
+          {
+            echo 'sql<<EOF'
+            cat examples/mixed_sqlite.sql
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      - name: Run SQL Optima (SQLite in-memory)
+        uses: ./
+        with:
+          engine: sqlite
+          sql_content: ${{ steps.sample.outputs.sql }}
+
+  test-mariadb-analysis:
+    name: Run SQL Optima against MariaDB
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MYSQL_DATABASE: test_db
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: |
+          npm ci
+          npm run build
+      - name: Prepare MariaDB schema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
+          mysql -h 127.0.0.1 -uroot -proot test_db < examples/seed_mysql.sql
+      - name: Load mixed MySQL/MariaDB sample
+        id: sample
+        shell: bash
+        run: |
+          {
+            echo 'sql<<EOF'
+            cat examples/mixed_mysql.sql
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      - name: Run SQL Optima (MariaDB)
+        uses: ./
+        with:
+          engine: mariadb
+          db_host: 127.0.0.1
+          db_port: '3306'
+          db_name: test_db
+          db_user: root
+          db_password: root
+          sql_content: ${{ steps.sample.outputs.sql }}

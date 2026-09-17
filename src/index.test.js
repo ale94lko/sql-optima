@@ -11,8 +11,10 @@ describe('run', () => {
   let generateMarkdownReport;
   let postgresAnalyzer;
   let mysqlAnalyzer;
+  let sqliteAnalyzer;
   let PostgresAnalyzer;
   let MySQLAnalyzer;
+  let SqliteAnalyzer;
 
   beforeEach(() => {
     analyzeStaticSQL = vi.fn().mockReturnValue([{ type: 'WILDCARD_SELECT' }]);
@@ -28,12 +30,20 @@ describe('run', () => {
       analyzeQuery: vi.fn().mockResolvedValue({ executed: true, issues: [] }),
       close: vi.fn().mockResolvedValue(undefined),
     };
+    sqliteAnalyzer = {
+      testConnection: vi.fn().mockResolvedValue(true),
+      analyzeQuery: vi.fn().mockResolvedValue({ executed: true, issues: [] }),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
 
     PostgresAnalyzer = vi.fn(function MockPostgresAnalyzer() {
       return postgresAnalyzer;
     });
     MySQLAnalyzer = vi.fn(function MockMySQLAnalyzer() {
       return mysqlAnalyzer;
+    });
+    SqliteAnalyzer = vi.fn(function MockSqliteAnalyzer() {
+      return sqliteAnalyzer;
     });
 
     core = {
@@ -75,6 +85,7 @@ describe('run', () => {
       formatter: { generateMarkdownReport },
       PostgresAnalyzer,
       MySQLAnalyzer,
+      SqliteAnalyzer,
       ...extra,
     };
   }
@@ -153,9 +164,36 @@ describe('run', () => {
     expect(postgresAnalyzer.close).toHaveBeenCalled();
   });
 
-  it('reports unsupported engines without opening a database connection', async () => {
+  it('runs sqlite analysis without requiring host connection settings', async () => {
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'sqlite';
+      if (name === 'sql_content') return 'CREATE TABLE t (id INT); SELECT * FROM t;';
+      return '';
+    });
+
+    await run(deps());
+
+    expect(SqliteAnalyzer).toHaveBeenCalled();
+    expect(sqliteAnalyzer.testConnection).toHaveBeenCalled();
+    expect(sqliteAnalyzer.analyzeQuery).toHaveBeenCalled();
+    expect(sqliteAnalyzer.close).toHaveBeenCalled();
+  });
+
+  it('maps cockroachdb to the postgres analyzer', async () => {
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'cockroachdb';
+      if (name === 'sql_content') return 'SELECT 1;';
+      return '';
+    });
+
+    await run(deps());
+
+    expect(PostgresAnalyzer).toHaveBeenCalled();
+  });
+
+  it('reports unsupported engines without opening a database connection', async () => {
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'snowflake';
       if (name === 'sql_content') return 'SELECT 1;';
       return '';
     });
@@ -166,12 +204,13 @@ describe('run', () => {
       expect.objectContaining({
         dynamicResult: expect.objectContaining({
           executed: false,
-          reason: expect.stringContaining('sqlite'),
+          reason: expect.stringContaining('snowflake'),
         }),
       }),
     );
     expect(PostgresAnalyzer).not.toHaveBeenCalled();
     expect(MySQLAnalyzer).not.toHaveBeenCalled();
+    expect(SqliteAnalyzer).not.toHaveBeenCalled();
   });
 
   it('marks the action as failed when summary writing throws', async () => {

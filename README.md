@@ -13,9 +13,9 @@ An automated **SQL performance analyzer, schema linter, and query execution opti
 
 ## Key Features
 
-- **Multi-Engine Support:** Works natively with **PostgreSQL** and **MySQL / MariaDB**.
+- **Multi-Engine Support:** Works with **PostgreSQL** (including CockroachDB / Aurora PostgreSQL wire-compatible aliases), **MySQL / MariaDB / Aurora MySQL**, and **SQLite** (in-memory, no service container).
 - **Static AST Analysis:** Inspects SQL syntax without needing a live database to detect missing primary keys, unindexed foreign key candidates, `SELECT *` usages, and leading wildcard `LIKE` queries.
-- **Dynamic Execution Analysis:** Runs `EXPLAIN (FORMAT JSON)` against live ephemeral DB services to inspect execution costs, high-cost joins, and sequential table scans.
+- **Dynamic Execution Analysis:** Runs engine-specific explain plans (`EXPLAIN` / `EXPLAIN QUERY PLAN`) against live or in-memory databases to inspect scans, sorts, and high-cost access paths.
 - **Dual Triggering:** Supports execution via standard workflow inputs or directly through external API calls (`repository_dispatch`).
 - **GitHub Step Summaries:** Publishes markdown reports directly to `$GITHUB_STEP_SUMMARY` and Pull Request checks.
 
@@ -25,13 +25,13 @@ An automated **SQL performance analyzer, schema linter, and query execution opti
 
 | Input | Description | Required | Default |
 | :--- | :--- | :---: | :--- |
-| `engine` | Database engine (`postgres` \| `mysql`) | `false` | `postgres` |
+| `engine` | Database engine (`postgres`, `mysql`, `mariadb`, `sqlite`, `cockroachdb`, `aurora-postgres`, `aurora-mysql`, …) | `false` | `postgres` |
 | `sql_content` | SQL query or schema definition script to analyze | `false` | `""` |
-| `db_host` | Database hostname | `false` | `localhost` |
-| `db_port` | Database connection port | `false` | `5432` / `3306` |
-| `db_name` | Test database name | `false` | `test_db` |
-| `db_user` | Database user | `false` | `postgres` / `root` |
-| `db_password` | Database user password | `false` | `root` |
+| `db_host` | Database hostname (ignored for `sqlite`) | `false` | `localhost` |
+| `db_port` | Database connection port (`5432` / `3306`; ignored for `sqlite`) | `false` | `5432` / `3306` |
+| `db_name` | Test database name (ignored for `sqlite`) | `false` | `test_db` |
+| `db_user` | Database user (ignored for `sqlite`) | `false` | `postgres` / `root` |
+| `db_password` | Database user password (ignored for `sqlite`) | `false` | `root` |
 
 ---
 
@@ -52,9 +52,10 @@ Checked-in fixtures under [`examples/`](examples/) intentionally trigger the fin
 | [`examples/bad_schema.sql`](examples/bad_schema.sql) | Missing primary keys and unindexed foreign keys (static) |
 | [`examples/bad_queries.sql`](examples/bad_queries.sql) | `SELECT *` and leading-wildcard `LIKE` (static; dynamic if tables exist) |
 | [`examples/mixed_postgres.sql`](examples/mixed_postgres.sql) | Combined schema + query demo for PostgreSQL |
-| [`examples/mixed_mysql.sql`](examples/mixed_mysql.sql) | Combined schema + query demo for MySQL |
+| [`examples/mixed_mysql.sql`](examples/mixed_mysql.sql) | Combined schema + query demo for MySQL / MariaDB |
+| [`examples/mixed_sqlite.sql`](examples/mixed_sqlite.sql) | Combined schema + query demo for SQLite (in-memory EXPLAIN) |
 | [`examples/seed_postgres.sql`](examples/seed_postgres.sql) | Seed `users` / `orders` for Postgres `EXPLAIN` |
-| [`examples/seed_mysql.sql`](examples/seed_mysql.sql) | Seed `users` / `orders` for MySQL `EXPLAIN` |
+| [`examples/seed_mysql.sql`](examples/seed_mysql.sql) | Seed `users` / `orders` for MySQL / MariaDB `EXPLAIN` |
 
 ### Expected findings
 
@@ -65,9 +66,19 @@ Checked-in fixtures under [`examples/`](examples/) intentionally trigger the fin
 | `WILDCARD_SELECT` | LOW | `SELECT * FROM orders …` | Project only required columns |
 | `LEADING_WILDCARD_LIKE` | MEDIUM | `email LIKE '%example.com'` | Avoid leading `%`, or use trigram/full-text search |
 | `FILTER_COLUMN_INDEX_CANDIDATE` | INFO | Columns used in `WHERE` | Consider indexes on hot filter columns |
-| `SEQUENTIAL_SCAN` / `FULL_TABLE_SCAN` | MEDIUM–HIGH | Dynamic `EXPLAIN` on unindexed filters (when DB is seeded) | Index `orders.user_id` / matching predicates |
+| `SEQUENTIAL_SCAN` / `FULL_TABLE_SCAN` / `SQLITE_TABLE_SCAN` | MEDIUM–HIGH | Dynamic explain on unindexed filters | Index matching predicates |
 
-> **Note:** `CREATE TABLE` in `sql_content` is linted statically but is **not** applied to the ephemeral database yet (see [#7](https://github.com/ale94lko/sql-optima/issues/7)). For dynamic findings, apply `examples/seed_*.sql` (or the CI prepare step) before analyzing the mixed samples.
+> **Note:** For PostgreSQL/MySQL, `CREATE TABLE` in `sql_content` is linted statically but is **not** applied to the ephemeral database yet (see [#7](https://github.com/ale94lko/sql-optima/issues/7)). Apply `examples/seed_*.sql` first. **SQLite** is different: the Action applies `CREATE`/`INSERT` from the same script into an in-memory DB before `EXPLAIN QUERY PLAN`.
+
+### Engine compatibility notes
+
+| Engine input | Static dialect | Dynamic analyzer |
+| :--- | :--- | :--- |
+| `postgres`, `postgresql` | PostgreSQL | `pg` + `EXPLAIN (ANALYZE, … FORMAT JSON)` |
+| `cockroach`, `cockroachdb`, `aurora-postgres` | PostgreSQL | Same Postgres analyzer (wire-compatible targets) |
+| `mysql`, `mariadb`, `aurora-mysql` | MySQL | `mysql2` + `EXPLAIN FORMAT=JSON` |
+| `sqlite`, `sqlite3` | SQLite | In-memory `sql.js` + `EXPLAIN QUERY PLAN` |
+| Other values | MySQL fallback for parsing when unknown | Clear “not currently supported” dynamic reason |
 
 ### Run against the samples
 

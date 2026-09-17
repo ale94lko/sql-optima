@@ -100,6 +100,12 @@ describe('analyzeStaticSQL', () => {
     expect(issues.some((issue) => issue.type === 'MISSING_PRIMARY_KEY')).toBe(true);
   });
 
+  it('supports the sqlite dialect', () => {
+    const issues = analyzeStaticSQL('CREATE TABLE t (name TEXT);', 'sqlite');
+
+    expect(issues.some((issue) => issue.type === 'MISSING_PRIMARY_KEY')).toBe(true);
+  });
+
   it('ignores non-create/select statements without failing', () => {
     const issues = analyzeStaticSQL('DROP TABLE IF EXISTS users;');
 

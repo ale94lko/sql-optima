@@ -9,8 +9,10 @@ async function run(overrides = {}) {
     overrides.staticAnalyzer || require('./analyzer/static');
   const PostgresAnalyzer = overrides.PostgresAnalyzer || require('./db/postgres');
   const MySQLAnalyzer = overrides.MySQLAnalyzer || require('./db/mysql');
+  const SqliteAnalyzer = overrides.SqliteAnalyzer || require('./db/sqlite');
   const { generateMarkdownReport } =
     overrides.formatter || require('./formatter');
+  const { resolveEngineDefaults } = overrides.sqlUtils || require('./sqlUtils');
 
   let dbAnalyzer = null;
 
@@ -41,19 +43,29 @@ async function run(overrides = {}) {
     core.info(`Static analysis complete. Found ${staticIssues.length} potential issue(s).`);
 
     // 4. Configure Database connection options
+    const defaults = resolveEngineDefaults(engine);
     const dbConfig = {
       host: core.getInput('db_host') || 'localhost',
-      port: parseInt(core.getInput('db_port') || (engine === 'mysql' ? '3306' : '5432'), 10),
+      port: parseInt(core.getInput('db_port') || defaults.port, 10),
       database: core.getInput('db_name') || 'test_db',
-      user: core.getInput('db_user') || (engine === 'mysql' ? 'root' : 'postgres'),
+      user: core.getInput('db_user') || defaults.user,
       password: core.getInput('db_password') || 'root',
     };
 
     // 5. Select and initialize the DB analyzer engine
-    if (engine === 'postgres' || engine === 'postgresql') {
+    if (
+      engine === 'postgres' ||
+      engine === 'postgresql' ||
+      engine === 'cockroach' ||
+      engine === 'cockroachdb' ||
+      engine === 'aurora-postgres' ||
+      engine === 'aurora_postgresql'
+    ) {
       dbAnalyzer = new PostgresAnalyzer(dbConfig);
-    } else if (engine === 'mysql' || engine === 'mariadb') {
+    } else if (engine === 'mysql' || engine === 'mariadb' || engine === 'aurora-mysql') {
       dbAnalyzer = new MySQLAnalyzer(dbConfig);
+    } else if (engine === 'sqlite' || engine === 'sqlite3') {
+      dbAnalyzer = new SqliteAnalyzer(dbConfig);
     }
 
     // 6. Execute Dynamic Analysis if a supported engine analyzer is available
