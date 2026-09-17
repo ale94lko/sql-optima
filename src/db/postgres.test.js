@@ -51,8 +51,8 @@ describe('PostgresAnalyzer', () => {
     expect(pool.connect).not.toHaveBeenCalled();
   });
 
-  it('extracts the last SELECT from a multi-statement script and inspects the plan', async () => {
-    client.query.mockResolvedValue({
+  it('applies schema before EXPLAIN and inspects the plan', async () => {
+    const explainPayload = {
       rows: [
         {
           'QUERY PLAN': [
@@ -84,7 +84,11 @@ describe('PostgresAnalyzer', () => {
           ],
         },
       ],
-    });
+    };
+
+    client.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce(explainPayload);
 
     const analyzer = new PostgresAnalyzer({}, { pool });
     const result = await analyzer.analyzeQuery(`
@@ -96,11 +100,44 @@ describe('PostgresAnalyzer', () => {
     expect(result.executionTimeMs).toBe(8);
     expect(result.planningTimeMs).toBe(0.5);
     expect(result.totalCost).toBe(120);
+    expect(client.query.mock.calls[0][0]).toContain('CREATE TABLE');
+    expect(client.query.mock.calls[1][0]).toContain('EXPLAIN');
     expect(result.issues.map((issue) => issue.type)).toEqual(
       expect.arrayContaining(['SEQUENTIAL_SCAN', 'DISK_SORT', 'HIGH_COST_NESTED_LOOP']),
     );
     expect(result.issues.find((issue) => issue.type === 'SEQUENTIAL_SCAN').severity).toBe('HIGH');
     expect(client.release).toHaveBeenCalled();
+  });
+
+  it('records SCHEMA_APPLY_ERROR and continues with EXPLAIN', async () => {
+    client.query
+      .mockRejectedValueOnce(new Error('syntax error at or near'))
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            'QUERY PLAN': [
+              {
+                Plan: {
+                  'Node Type': 'Seq Scan',
+                  'Actual Rows': 10,
+                  'Total Cost': 5,
+                },
+              },
+            ],
+          },
+        ],
+      });
+
+    const analyzer = new PostgresAnalyzer({}, { pool });
+    const result = await analyzer.analyzeQuery(`
+      CREATE TABLE bad (;
+      SELECT * FROM t;
+    `);
+
+    expect(result.executed).toBe(true);
+    expect(result.issues.map((i) => i.type)).toEqual(
+      expect.arrayContaining(['SCHEMA_APPLY_ERROR', 'SEQUENTIAL_SCAN']),
+    );
   });
 
   it('supports WITH statements and medium-severity sequential scans', async () => {

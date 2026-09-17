@@ -1,38 +1,34 @@
 const mysql = require('mysql2/promise');
+const {
+  extractSelectStatement,
+  extractSchemaStatements,
+  stripLeadingComments,
+} = require('../sqlUtils');
 
 /**
- * MySQL Database Handler for Dynamic Query Execution Analysis.
+ * MySQL / MariaDB Database Handler for Dynamic Query Execution Analysis.
  */
 class MySQLAnalyzer {
   /**
-   * Initializes the MySQL connection pool configuration.
+   * Initializes the MySQL connection pool.
    * @param {Object} config - Database connection options.
    * @param {Object} [dependencies] - Optional test doubles.
-   * @param {Function} [dependencies.createPool] - Injected mysql2 createPool function.
+   * @param {Object} [dependencies.pool] - Injected mysql2 pool.
    */
   constructor(config, dependencies = {}) {
-    this.config = {
-      host: config.host || 'localhost',
-      port: config.port || 3306,
-      database: config.database || 'test_db',
-      user: config.user || 'root',
-      password: config.password || 'root',
-      waitForConnections: true,
-      connectionLimit: 5,
-      queueLimit: 0,
-    };
-    this.createPool = dependencies.createPool || mysql.createPool;
-    this.pool = null;
-  }
-
-  /**
-   * Gets or creates the connection pool.
-   */
-  getPool() {
-    if (!this.pool) {
-      this.pool = this.createPool(this.config);
-    }
-    return this.pool;
+    this.pool =
+      dependencies.pool ||
+      mysql.createPool({
+        host: config.host || 'localhost',
+        port: config.port || 3306,
+        database: config.database || 'test_db',
+        user: config.user || 'root',
+        password: config.password || 'root',
+        waitForConnections: true,
+        connectionLimit: 5,
+        connectTimeout: 5000,
+        enableKeepAlive: true,
+      });
   }
 
   /**
@@ -40,26 +36,29 @@ class MySQLAnalyzer {
    * @returns {Promise<boolean>} True if connected successfully.
    */
   async testConnection() {
+    let connection;
     try {
-      const pool = this.getPool();
-      const [rows] = await pool.query('SELECT 1;');
-      return Array.isArray(rows);
+      connection = await this.pool.getConnection();
+      await connection.query('SELECT 1;');
+      return true;
     } catch (error) {
       throw new Error(`MySQL Connection Failed: ${error.message}`);
+    } finally {
+      if (connection) connection.release();
     }
   }
 
   /**
-   * Executes EXPLAIN FORMAT=JSON on a query and parses execution bottlenecks.
+   * Applies schema statements from the script, then runs EXPLAIN FORMAT=JSON.
    *
-   * @param {string} sqlQuery - The SQL SELECT query to analyze.
+   * @param {string} sqlQuery - The SQL script to analyze.
    * @returns {Promise<Object>} Execution metrics and dynamic suggestions.
    */
   async analyzeQuery(sqlQuery) {
+    let connection;
     const issues = [];
     let planData = null;
 
-    // Prefer the last SELECT/WITH statement when a multi-statement script is provided
     const selectQuery = extractSelectStatement(sqlQuery);
     if (!selectQuery) {
       return {
@@ -70,17 +69,30 @@ class MySQLAnalyzer {
     }
 
     try {
-      const pool = this.getPool();
+      connection = await this.pool.getConnection();
 
-      // Execute EXPLAIN in JSON format
-      const [rows] = await pool.query(`EXPLAIN FORMAT=JSON ${selectQuery}`);
+      for (const statement of extractSchemaStatements(sqlQuery)) {
+        try {
+          await connection.query(stripLeadingComments(statement));
+        } catch (schemaError) {
+          issues.push({
+            type: 'SCHEMA_APPLY_ERROR',
+            severity: 'MEDIUM',
+            message: `Failed to apply schema statement before EXPLAIN: ${schemaError.message}`,
+            suggestion:
+              'Ensure CREATE/INSERT statements are valid for MySQL/MariaDB, or pre-seed the database.',
+          });
+        }
+      }
+
+      const [rows] = await connection.query(`EXPLAIN FORMAT=JSON ${selectQuery}`);
 
       if (rows && rows[0] && rows[0].EXPLAIN) {
-        planData =
-          typeof rows[0].EXPLAIN === 'string' ? JSON.parse(rows[0].EXPLAIN) : rows[0].EXPLAIN;
+        planData = typeof rows[0].EXPLAIN === 'string' ? JSON.parse(rows[0].EXPLAIN) : rows[0].EXPLAIN;
 
-        const queryBlock = planData.query_block;
-        this.inspectQueryBlock(queryBlock, issues);
+        if (planData.query_block) {
+          this.inspectQueryBlock(planData.query_block, issues);
+        }
       }
 
       return {
@@ -92,17 +104,20 @@ class MySQLAnalyzer {
     } catch (error) {
       return {
         executed: false,
-        error: `Failed to execute EXPLAIN on MySQL: ${error.message}`,
+        error: `Failed to execute EXPLAIN: ${error.message}`,
         issues: [
+          ...issues,
           {
             type: 'EXPLAIN_EXECUTION_ERROR',
             severity: 'HIGH',
             message: `Database error during execution: ${error.message}`,
             suggestion:
-              'Verify that tables and columns exist in MySQL before running dynamic checks.',
+              'Ensure referenced tables/columns exist in the MySQL schema before running dynamic checks.',
           },
         ],
       };
+    } finally {
+      if (connection) connection.release();
     }
   }
 
@@ -112,12 +127,10 @@ class MySQLAnalyzer {
   inspectQueryBlock(queryBlock, issues) {
     if (!queryBlock) return;
 
-    // 1. Inspect table scan operations
     if (queryBlock.table) {
       this.inspectTableNode(queryBlock.table, issues);
     }
 
-    // 2. Inspect JOIN tables
     if (queryBlock.nested_loop) {
       queryBlock.nested_loop.forEach((loop) => {
         if (loop.table) {
@@ -126,7 +139,6 @@ class MySQLAnalyzer {
       });
     }
 
-    // 3. Detect temporary table / filesort operations
     if (queryBlock.ordering_operation) {
       if (queryBlock.ordering_operation.using_filesort) {
         issues.push({
@@ -156,7 +168,6 @@ class MySQLAnalyzer {
     const accessType = tableNode.access_type?.toLowerCase();
     const rowsExamined = tableNode.rows_examined_per_scan || 0;
 
-    // Full Table Scan detection (access_type ALL)
     if (accessType === 'all') {
       issues.push({
         type: 'FULL_TABLE_SCAN',
@@ -166,7 +177,6 @@ class MySQLAnalyzer {
       });
     }
 
-    // Unindexed JOINs (access_type index / ALL without key usage)
     if (!tableNode.key && accessType !== 'all') {
       issues.push({
         type: 'MISSING_INDEX_USAGE',
@@ -186,27 +196,6 @@ class MySQLAnalyzer {
       this.pool = null;
     }
   }
-}
-
-/**
- * Extracts the last SELECT or WITH statement from a SQL script.
- * @param {string} sqlQuery
- * @returns {string|null}
- */
-function extractSelectStatement(sqlQuery) {
-  const statements = sqlQuery
-    .split(';')
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  for (let i = statements.length - 1; i >= 0; i -= 1) {
-    const trimmed = statements[i].toLowerCase();
-    if (trimmed.startsWith('select') || trimmed.startsWith('with')) {
-      return statements[i];
-    }
-  }
-
-  return null;
 }
 
 module.exports = MySQLAnalyzer;

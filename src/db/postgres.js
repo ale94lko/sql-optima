@@ -1,4 +1,9 @@
 const { Pool } = require('pg');
+const {
+  extractSelectStatement,
+  extractSchemaStatements,
+  stripLeadingComments,
+} = require('../sqlUtils');
 
 /**
  * PostgreSQL Database Handler for Dynamic Query Execution Analysis.
@@ -43,9 +48,9 @@ class PostgresAnalyzer {
   }
 
   /**
-   * Executes EXPLAIN ANALYZE on a query and parses execution bottlenecks.
+   * Applies schema statements from the script, then runs EXPLAIN ANALYZE.
    *
-   * @param {string} sqlQuery - The SQL SELECT query to analyze.
+   * @param {string} sqlQuery - The SQL script to analyze.
    * @returns {Promise<Object>} Execution metrics and dynamic suggestions.
    */
   async analyzeQuery(sqlQuery) {
@@ -53,7 +58,6 @@ class PostgresAnalyzer {
     const issues = [];
     let planData = null;
 
-    // Prefer the last SELECT/WITH statement when a multi-statement script is provided
     const selectQuery = extractSelectStatement(sqlQuery);
     if (!selectQuery) {
       return {
@@ -66,15 +70,26 @@ class PostgresAnalyzer {
     try {
       client = await this.pool.connect();
 
-      // Wrap EXPLAIN in JSON format with cost and buffer metrics
+      for (const statement of extractSchemaStatements(sqlQuery)) {
+        try {
+          await client.query(stripLeadingComments(statement));
+        } catch (schemaError) {
+          issues.push({
+            type: 'SCHEMA_APPLY_ERROR',
+            severity: 'MEDIUM',
+            message: `Failed to apply schema statement before EXPLAIN: ${schemaError.message}`,
+            suggestion:
+              'Ensure CREATE/INSERT statements are valid for PostgreSQL, or pre-seed the database.',
+          });
+        }
+      }
+
       const explainSql = `EXPLAIN (ANALYZE, COSTS, VERBOSE, BUFFERS, FORMAT JSON) ${selectQuery}`;
       const res = await client.query(explainSql);
 
       if (res.rows && res.rows[0]) {
         planData = res.rows[0]['QUERY PLAN'][0];
         const rootNode = planData.Plan;
-
-        // Traverse the execution tree to find expensive operations
         this.inspectPlanNode(rootNode, issues);
       }
 
@@ -91,6 +106,7 @@ class PostgresAnalyzer {
         executed: false,
         error: `Failed to execute EXPLAIN ANALYZE: ${error.message}`,
         issues: [
+          ...issues,
           {
             type: 'EXPLAIN_EXECUTION_ERROR',
             severity: 'HIGH',
@@ -115,7 +131,6 @@ class PostgresAnalyzer {
     const totalCost = node['Total Cost'] || 0;
     const actualTotalTime = node['Actual Total Time'] || 0;
 
-    // 1. Detect Sequential Scans (Seq Scan)
     if (nodeType === 'Seq Scan') {
       const relation = node['Relation Name'] || 'unknown_table';
       const rows = node['Actual Rows'] || 0;
@@ -128,7 +143,6 @@ class PostgresAnalyzer {
       });
     }
 
-    // 2. Detect Disk-based Sorts
     if (nodeType === 'Sort' && node['Sort Space Type'] === 'Disk') {
       issues.push({
         type: 'DISK_SORT',
@@ -139,7 +153,6 @@ class PostgresAnalyzer {
       });
     }
 
-    // 3. Detect Nested Loop joins with high cost
     if (nodeType === 'Nested Loop' && actualTotalTime > 100) {
       issues.push({
         type: 'HIGH_COST_NESTED_LOOP',
@@ -149,7 +162,6 @@ class PostgresAnalyzer {
       });
     }
 
-    // Recurse child nodes
     if (Array.isArray(node.Plans)) {
       node.Plans.forEach((child) => this.inspectPlanNode(child, issues));
     }
@@ -161,27 +173,6 @@ class PostgresAnalyzer {
   async close() {
     await this.pool.end();
   }
-}
-
-/**
- * Extracts the last SELECT or WITH statement from a SQL script.
- * @param {string} sqlQuery
- * @returns {string|null}
- */
-function extractSelectStatement(sqlQuery) {
-  const statements = sqlQuery
-    .split(';')
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  for (let i = statements.length - 1; i >= 0; i -= 1) {
-    const trimmed = statements[i].toLowerCase();
-    if (trimmed.startsWith('select') || trimmed.startsWith('with')) {
-      return statements[i];
-    }
-  }
-
-  return null;
 }
 
 module.exports = PostgresAnalyzer;
