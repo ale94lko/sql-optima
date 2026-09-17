@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Relicense from Source-Available (AI restriction) to **MIT** for OpenSSF Best Practices FLOSS criteria.
+
 ### Added
 
 - OpenSSF Best Practices badge ([project 14693](https://www.bestpractices.dev/projects/14693)).

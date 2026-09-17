@@ -2,7 +2,7 @@
   "name": "sql-optima-action",
   "version": "1.0.0",
   "description": "Automated SQL performance analyzer & optimization engine for GitHub Actions",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "main": "dist/index.js",
   "engines": {
     "node": ">=24"
