@@ -1,6 +1,7 @@
 # SQL Optima Action
 
 [![Health Score](https://raw.githubusercontent.com/ale94lko/sql-optima/output/badge.svg)](https://github.com/ale94lko/sql-optima/community)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14693/badge)](https://www.bestpractices.dev/projects/14693)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-SQL%20Optima%20Action-blue?style=flat-square&logo=github)](https://github.com/marketplace/actions/sql-optima-action)
 [![License: Source-Available (AI restricted)](https://img.shields.io/badge/License-Source--Available-blue.svg?style=flat-square)](LICENSE)
 [![CI](https://github.com/ale94lko/sql-optima/actions/workflows/ci.yml/badge.svg)](https://github.com/ale94lko/sql-optima/actions/workflows/ci.yml)
