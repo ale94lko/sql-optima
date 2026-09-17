@@ -25,7 +25,7 @@ An automated **SQL performance analyzer, schema linter, and query execution opti
     db_password: root
 ```
 
-More engines, inputs, and samples: see [Usage](#usage) below. Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md). Achievements: [docs/ACHIEVEMENTS.md](docs/ACHIEVEMENTS.md).
+More engines, inputs, and samples: see [Usage Examples](#usage-examples) below. Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md). Achievements: [docs/ACHIEVEMENTS.md](docs/ACHIEVEMENTS.md).
 
 ---
 
