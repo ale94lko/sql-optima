@@ -126,16 +126,6 @@ jobs:
           PGPASSWORD: root
         run: psql -h localhost -U postgres -d test_db -f examples/seed_postgres.sql
 
-      - name: Load mixed Postgres sample
-        id: sample
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_postgres.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Run SQL Optima (Postgres)
         uses: ./
         with:
@@ -145,7 +135,7 @@ jobs:
           db_name: test_db
           db_user: postgres
           db_password: root
-          sql_content: ${{ steps.sample.outputs.sql }}
+          sql_file: examples/mixed_postgres.sql
 
   integration-mysql:
     name: Integration (MySQL)
@@ -184,16 +174,6 @@ jobs:
           sudo apt-get install -y default-mysql-client
           mysql -h 127.0.0.1 -uroot -proot test_db < examples/seed_mysql.sql
 
-      - name: Load mixed MySQL sample
-        id: sample
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_mysql.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Run SQL Optima (MySQL)
         uses: ./
         with:
@@ -203,7 +183,7 @@ jobs:
           db_name: test_db
           db_user: root
           db_password: root
-          sql_content: ${{ steps.sample.outputs.sql }}
+          sql_file: examples/mixed_mysql.sql
 
   integration-mariadb:
     name: Integration (MariaDB)
@@ -242,16 +222,6 @@ jobs:
           sudo apt-get install -y default-mysql-client
           mysql -h 127.0.0.1 -uroot -proot test_db < examples/seed_mysql.sql
 
-      - name: Load mixed MySQL/MariaDB sample
-        id: sample
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_mysql.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Run SQL Optima (MariaDB)
         uses: ./
         with:
@@ -261,7 +231,7 @@ jobs:
           db_name: test_db
           db_user: root
           db_password: root
-          sql_content: ${{ steps.sample.outputs.sql }}
+          sql_file: examples/mixed_mysql.sql
 
   integration-sqlite:
     name: Integration (SQLite)
@@ -281,21 +251,11 @@ jobs:
           npm ci
           npm run build
 
-      - name: Load mixed SQLite sample
-        id: sample
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_sqlite.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Run SQL Optima (SQLite)
         uses: ./
         with:
           engine: sqlite
-          sql_content: ${{ steps.sample.outputs.sql }}
+          sql_file: examples/mixed_sqlite.sql
 
   integration-mssql:
     name: Integration (SQL Server)
@@ -354,16 +314,6 @@ jobs:
           })();
           EOF
 
-      - name: Load mixed SQL Server sample
-        id: sample
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_mssql.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Run SQL Optima (SQL Server)
         uses: ./
         with:
@@ -373,7 +323,7 @@ jobs:
           db_name: test_db
           db_user: sa
           db_password: Your_strong_Password123
-          sql_content: ${{ steps.sample.outputs.sql }}
+          sql_file: examples/mixed_mssql.sql
 
   integration-warehouses:
     name: Integration (BigQuery / Snowflake static)
@@ -393,34 +343,14 @@ jobs:
           npm ci
           npm run build
 
-      - name: Load BigQuery sample
-        id: bq
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_bigquery.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Run SQL Optima (BigQuery static-only)
         uses: ./
         with:
           engine: bigquery
-          sql_content: ${{ steps.bq.outputs.sql }}
-
-      - name: Load Snowflake sample
-        id: sf
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_snowflake.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
+          sql_file: examples/mixed_bigquery.sql
 
       - name: Run SQL Optima (Snowflake static-only)
         uses: ./
         with:
           engine: snowflake
-          sql_content: ${{ steps.sf.outputs.sql }}
+          sql_file: examples/mixed_snowflake.sql

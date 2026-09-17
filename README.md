@@ -27,12 +27,15 @@ An automated **SQL performance analyzer, schema linter, and query execution opti
 | Input | Description | Required | Default |
 | :--- | :--- | :---: | :--- |
 | `engine` | Database engine (`postgres`, `mysql`, `mariadb`, `sqlite`, `mssql`, `bigquery`, `snowflake`, `cockroachdb`, `aurora-postgres`, `aurora-mysql`, …) | `false` | `postgres` |
+| `sql_file` | Path to a `.sql` file in the workspace to analyze (takes precedence over `sql_content`) | `false` | `""` |
 | `sql_content` | SQL query or schema definition script to analyze | `false` | `""` |
 | `db_host` | Database hostname (ignored for `sqlite` / static-only engines) | `false` | `localhost` |
 | `db_port` | Database connection port (`5432` / `3306` / `1433`; ignored for `sqlite` / static-only) | `false` | engine default |
 | `db_name` | Test database name (ignored for `sqlite` / static-only) | `false` | `test_db` |
 | `db_user` | Database user (ignored for `sqlite` / static-only) | `false` | engine default |
 | `db_password` | Database user password (ignored for `sqlite` / static-only) | `false` | engine default |
+
+SQL source resolution order: `sql_file` → `sql_content` → `repository_dispatch` `client_payload.sql_code` / `sql_content`.
 
 ---
 
@@ -99,21 +102,11 @@ The [CI workflow](.github/workflows/ci.yml) runs unit tests, lint, a `dist/` fre
 ```yaml
 - uses: actions/checkout@v4
 
-- name: Load sample SQL
-  id: sample
-  shell: bash
-  run: |
-    {
-      echo 'sql<<EOF'
-      cat examples/mixed_postgres.sql
-      echo 'EOF'
-    } >> "$GITHUB_OUTPUT"
-
 - name: Run SQL Optima
   uses: ale94lko/sql-optima@v1
   with:
     engine: postgres
-    sql_content: ${{ steps.sample.outputs.sql }}
+    sql_file: examples/mixed_postgres.sql
     db_host: localhost
     db_port: '5432'
     db_name: test_db
@@ -242,11 +235,7 @@ jobs:
         uses: ale94lko/sql-optima@v1
         with:
           engine: 'mysql'
-          sql_content: |
-            CREATE TABLE users (
-              username VARCHAR(50) NOT NULL
-            );
-            SELECT * FROM users WHERE username LIKE '%admin';
+          sql_file: examples/mixed_mysql.sql
           db_host: 'localhost'
           db_port: '3306'
           db_user: 'root'

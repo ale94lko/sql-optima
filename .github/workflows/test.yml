@@ -47,17 +47,6 @@ jobs:
           PGPASSWORD: root
         run: psql -h localhost -U postgres -d test_db -f examples/seed_postgres.sql
 
-      - name: Load sample SQL
-        id: sample
-        if: github.event_name == 'workflow_dispatch'
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_postgres.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Run SQL Optima (workflow_dispatch sample)
         if: github.event_name == 'workflow_dispatch'
         uses: ./
@@ -68,7 +57,7 @@ jobs:
           db_name: test_db
           db_user: postgres
           db_password: root
-          sql_content: ${{ steps.sample.outputs.sql }}
+          sql_file: examples/mixed_postgres.sql
 
       - name: Run SQL Optima (repository_dispatch payload)
         if: github.event_name == 'repository_dispatch'

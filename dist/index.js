@@ -92514,6 +92514,8 @@ module.exports = {
 async function run(overrides = {}) {
   const core = overrides.core || __nccwpck_require__(37484);
   const github = overrides.github || __nccwpck_require__(93228);
+  const fs = overrides.fs || __nccwpck_require__(79896);
+  const path = overrides.path || __nccwpck_require__(16928);
   const { analyzeStaticSQL } =
     overrides.staticAnalyzer || __nccwpck_require__(76640);
   const PostgresAnalyzer = overrides.PostgresAnalyzer || __nccwpck_require__(97353);
@@ -92530,30 +92532,50 @@ async function run(overrides = {}) {
   try {
     // 1. Extract inputs from GitHub Actions environment
     let engine = core.getInput('engine') || 'postgres';
-    let sqlContent = core.getInput('sql_content');
+    const sqlFile = (core.getInput('sql_file') || '').trim();
+    const sqlContentInput = core.getInput('sql_content') || '';
 
-    // 2. Check for payload parameters if triggered via repository_dispatch (GitHub API)
+    // 2. Optional engine override from repository_dispatch payload
     const payload = github.context.payload.client_payload;
     if (payload) {
       engine = payload.engine || engine;
-      sqlContent = payload.sql_code || payload.sql_content || sqlContent;
+    }
+    const payloadSql = payload
+      ? payload.sql_code || payload.sql_content || ''
+      : '';
+
+    // 3. Resolve SQL source: sql_file > sql_content > repository_dispatch payload
+    let sqlContent = '';
+    if (sqlFile) {
+      const resolvedPath = path.resolve(sqlFile);
+      if (!fs.existsSync(resolvedPath)) {
+        core.setFailed(`SQL file not found: ${sqlFile}`);
+        return;
+      }
+      sqlContent = fs.readFileSync(resolvedPath, 'utf8');
+      core.info(`Loaded SQL from file: ${sqlFile}`);
+    } else if (sqlContentInput.trim() !== '') {
+      sqlContent = sqlContentInput;
+    } else if (String(payloadSql).trim() !== '') {
+      sqlContent = payloadSql;
     }
 
-    // Validate that SQL content is available
     if (!sqlContent || sqlContent.trim() === '') {
-      core.setFailed('No SQL content provided to analyze. Pass "sql_content" input or API payload.');
+      core.setFailed(
+        'No SQL content provided to analyze. Pass "sql_file", "sql_content", or a repository_dispatch payload.',
+      );
       return;
     }
 
     engine = engine.toLowerCase();
     core.info(`Starting SQL Optima analysis for engine: ${engine}`);
 
-    // 3. Execute Static AST Analysis
+    // 4. Execute Static AST Analysis
     core.info('Running static AST analysis...');
     const staticIssues = analyzeStaticSQL(sqlContent, engine);
     core.info(`Static analysis complete. Found ${staticIssues.length} potential issue(s).`);
 
-    // 4. Configure Database connection options
+    // 5. Configure Database connection options
     const defaults = resolveEngineDefaults(engine);
     const dbConfig = {
       host: core.getInput('db_host') || 'localhost',
@@ -92563,7 +92585,7 @@ async function run(overrides = {}) {
       password: core.getInput('db_password') || defaults.password || 'root',
     };
 
-    // 5. Select and initialize the DB analyzer engine
+    // 6. Select and initialize the DB analyzer engine
     if (
       engine === 'postgres' ||
       engine === 'postgresql' ||
@@ -92587,7 +92609,7 @@ async function run(overrides = {}) {
       dbAnalyzer = new MssqlAnalyzer(dbConfig);
     }
 
-    // 6. Execute Dynamic Analysis if a supported engine analyzer is available
+    // 7. Execute Dynamic Analysis if a supported engine analyzer is available
     let dynamicResult = { executed: false, issues: [] };
 
     if (dbAnalyzer) {
@@ -92620,7 +92642,7 @@ async function run(overrides = {}) {
       };
     }
 
-    // 7. Generate Markdown Report
+    // 8. Generate Markdown Report
     core.info('Generating markdown summary report...');
     const markdownReport = generateMarkdownReport({
       engine,
@@ -92629,7 +92651,7 @@ async function run(overrides = {}) {
       dynamicResult,
     });
 
-    // 8. Output to GitHub Step Summary ($GITHUB_STEP_SUMMARY) and Action Outputs
+    // 9. Output to GitHub Step Summary ($GITHUB_STEP_SUMMARY) and Action Outputs
     await core.summary.addRaw(markdownReport).write();
     core.setOutput('report', markdownReport);
 

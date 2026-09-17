@@ -101,7 +101,11 @@ describe('run', () => {
     };
   }
 
-  it('uses sql_content from repository_dispatch when sql_code is absent', async () => {
+  it('uses sql_content from repository_dispatch when sql_code and inputs are absent', async () => {
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'mariadb';
+      return '';
+    });
     github.context.payload = {
       client_payload: {
         engine: 'mariadb',
@@ -126,7 +130,74 @@ describe('run', () => {
     expect(analyzeStaticSQL).not.toHaveBeenCalled();
   });
 
-  it('uses repository_dispatch payload overrides and postgres analysis', async () => {
+  it('fails clearly when sql_file path does not exist', async () => {
+    const fs = {
+      existsSync: vi.fn().mockReturnValue(false),
+      readFileSync: vi.fn(),
+    };
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'postgres';
+      if (name === 'sql_file') return 'missing.sql';
+      return '';
+    });
+
+    await run(deps({ fs }));
+
+    expect(core.setFailed).toHaveBeenCalledWith('SQL file not found: missing.sql');
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(analyzeStaticSQL).not.toHaveBeenCalled();
+  });
+
+  it('prefers sql_file over sql_content and repository_dispatch payload', async () => {
+    const fs = {
+      existsSync: vi.fn().mockReturnValue(true),
+      readFileSync: vi.fn().mockReturnValue('SELECT id FROM file_table;'),
+    };
+    const path = {
+      resolve: vi.fn((p) => `/workspace/${p}`),
+    };
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'postgres';
+      if (name === 'sql_file') return 'examples/mixed_postgres.sql';
+      if (name === 'sql_content') return 'SELECT id FROM input_table;';
+      return '';
+    });
+    github.context.payload = {
+      client_payload: {
+        sql_code: 'SELECT id FROM payload_table;',
+      },
+    };
+
+    await run(deps({ fs, path }));
+
+    expect(path.resolve).toHaveBeenCalledWith('examples/mixed_postgres.sql');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/workspace/examples/mixed_postgres.sql', 'utf8');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM file_table;', 'postgres');
+  });
+
+  it('prefers sql_content input over repository_dispatch payload', async () => {
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'postgres';
+      if (name === 'sql_content') return 'SELECT id FROM input_table;';
+      return '';
+    });
+    github.context.payload = {
+      client_payload: {
+        engine: 'postgresql',
+        sql_code: 'SELECT * FROM orders;',
+      },
+    };
+
+    await run(deps());
+
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM input_table;', 'postgresql');
+  });
+
+  it('uses repository_dispatch payload when inputs are empty', async () => {
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'postgres';
+      return '';
+    });
     github.context.payload = {
       client_payload: {
         engine: 'postgresql',

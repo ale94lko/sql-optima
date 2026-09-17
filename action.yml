@@ -7,6 +7,9 @@ inputs:
     description: 'Database engine (postgres | mysql | mariadb | sqlite | mssql | bigquery | snowflake | cockroachdb | aurora-postgres | aurora-mysql | …)'
     required: false
     default: 'postgres'
+  sql_file:
+    description: 'Path to a SQL file in the workspace to analyze (takes precedence over sql_content)'
+    required: false
   sql_content:
     description: 'SQL code or script to analyze'
     required: false
