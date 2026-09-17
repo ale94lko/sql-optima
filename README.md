@@ -43,6 +43,87 @@ An automated **SQL performance analyzer, schema linter, and query execution opti
 
 ---
 
+## Try it with sample SQL
+
+Checked-in fixtures under [`examples/`](examples/) intentionally trigger the findings sql-optima already detects. Use them to reproduce a report without inventing SQL.
+
+| File | Purpose |
+| :--- | :--- |
+| [`examples/bad_schema.sql`](examples/bad_schema.sql) | Missing primary keys and unindexed foreign keys (static) |
+| [`examples/bad_queries.sql`](examples/bad_queries.sql) | `SELECT *` and leading-wildcard `LIKE` (static; dynamic if tables exist) |
+| [`examples/mixed_postgres.sql`](examples/mixed_postgres.sql) | Combined schema + query demo for PostgreSQL |
+| [`examples/mixed_mysql.sql`](examples/mixed_mysql.sql) | Combined schema + query demo for MySQL |
+| [`examples/seed_postgres.sql`](examples/seed_postgres.sql) | Seed `users` / `orders` for Postgres `EXPLAIN` |
+| [`examples/seed_mysql.sql`](examples/seed_mysql.sql) | Seed `users` / `orders` for MySQL `EXPLAIN` |
+
+### Expected findings
+
+| Issue type | Severity | Why it fires | Suggested fix |
+| :--- | :--- | :--- | :--- |
+| `MISSING_PRIMARY_KEY` | HIGH | `products` has no `PRIMARY KEY` | Add an `id` (or natural) primary key |
+| `UNINDEXED_FOREIGN_KEY` | MEDIUM | `order_items.order_id` is a FK without an explicit index | `CREATE INDEX` on the FK column(s) |
+| `WILDCARD_SELECT` | LOW | `SELECT * FROM orders …` | Project only required columns |
+| `LEADING_WILDCARD_LIKE` | MEDIUM | `email LIKE '%example.com'` | Avoid leading `%`, or use trigram/full-text search |
+| `FILTER_COLUMN_INDEX_CANDIDATE` | INFO | Columns used in `WHERE` | Consider indexes on hot filter columns |
+| `SEQUENTIAL_SCAN` / `FULL_TABLE_SCAN` | MEDIUM–HIGH | Dynamic `EXPLAIN` on unindexed filters (when DB is seeded) | Index `orders.user_id` / matching predicates |
+
+> **Note:** `CREATE TABLE` in `sql_content` is linted statically but is **not** applied to the ephemeral database yet (see [#7](https://github.com/ale94lko/sql-optima/issues/7)). For dynamic findings, apply `examples/seed_*.sql` (or the CI prepare step) before analyzing the mixed samples.
+
+### Run against the samples
+
+#### A) In this repository’s CI (`workflow_dispatch` / push / PR)
+
+The test workflow loads [`examples/mixed_postgres.sql`](examples/mixed_postgres.sql) after seeding Postgres and posts the report to the Job Summary.
+
+#### B) From a consumer workflow (inline file contents)
+
+```yaml
+- uses: actions/checkout@v4
+
+- name: Load sample SQL
+  id: sample
+  shell: bash
+  run: |
+    {
+      echo 'sql<<EOF'
+      cat examples/mixed_postgres.sql
+      echo 'EOF'
+    } >> "$GITHUB_OUTPUT"
+
+- name: Run SQL Optima
+  uses: ale94lko/sql-optima@v1
+  with:
+    engine: postgres
+    sql_content: ${{ steps.sample.outputs.sql }}
+    db_host: localhost
+    db_port: '5432'
+    db_name: test_db
+    db_user: postgres
+    db_password: root
+```
+
+#### C) Via GitHub API (`repository_dispatch`)
+
+Send the sample body as `client_payload.sql_code` (escape newlines for JSON, or paste a single-line script):
+
+```bash
+SQL=$(jq -Rs . < examples/mixed_postgres.sql)
+curl -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer YOUR_PERSONAL_ACCESS_TOKEN" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  https://api.github.com/repos/OWNER/REPO/dispatches \
+  -d "{\"event_type\":\"analyze-sql\",\"client_payload\":{\"engine\":\"postgres\",\"sql_code\":$SQL}}"
+```
+
+#### D) Local static smoke check (no database)
+
+```bash
+node -e "const {analyzeStaticSQL}=require('./src/analyzer/static'); const fs=require('fs'); console.log(analyzeStaticSQL(fs.readFileSync('examples/mixed_postgres.sql','utf8'),'postgres'));"
+```
+
+---
+
 ## Usage Examples
 
 ### 1. Trigger via GitHub REST API (`repository_dispatch`)

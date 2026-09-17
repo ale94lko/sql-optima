@@ -48,28 +48,24 @@ jobs:
           npm run test:coverage
           npm run build
 
-      # Step 1: Initialize dummy tables in PostgreSQL service
+      # Seed tables required for dynamic EXPLAIN on the sample SELECT statements
       - name: Prepare database schema
         env:
           PGPASSWORD: root
-        run: |
-          psql -h localhost -U postgres -d test_db -c "
-            CREATE TABLE IF NOT EXISTS users (
-              id SERIAL PRIMARY KEY,
-              email VARCHAR(255) NOT NULL,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS orders (
-              id SERIAL PRIMARY KEY,
-              user_id INT,
-              amount DECIMAL(10, 2)
-            );
-            INSERT INTO users (email) SELECT 'user_' || generate_series(1, 100) || '@example.com';
-            INSERT INTO orders (user_id, amount) SELECT (random() * 99 + 1)::int, random() * 100 FROM generate_series(1, 500);
-          "
+        run: psql -h localhost -U postgres -d test_db -f examples/seed_postgres.sql
 
-      # Step 2: Test Action using direct workflow inputs
-      - name: Run SQL Optima (Direct Inputs)
+      - name: Load mixed Postgres sample
+        id: sample
+        shell: bash
+        run: |
+          {
+            echo 'sql<<EOF'
+            cat examples/mixed_postgres.sql
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # Analyze checked-in sample SQL (static + dynamic findings in Step Summary)
+      - name: Run SQL Optima (sample fixtures)
         uses: ./
         with:
           engine: 'postgres'
@@ -78,13 +74,9 @@ jobs:
           db_name: 'test_db'
           db_user: 'postgres'
           db_password: 'root'
-          sql_content: |
-            CREATE TABLE bad_table (
-              name VARCHAR(100)
-            );
-            SELECT * FROM orders WHERE user_id = 5;
+          sql_content: ${{ steps.sample.outputs.sql }}
 
-      # Step 3: Test Action using repository_dispatch client_payload fallback
+      # repository_dispatch client_payload fallback
       - name: Run SQL Optima (API Payload Simulation)
         if: github.event_name == 'repository_dispatch'
         uses: ./
