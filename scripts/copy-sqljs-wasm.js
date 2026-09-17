@@ -11,4 +11,5 @@ if (!fs.existsSync(source)) {
 
 fs.mkdirSync(path.dirname(target), { recursive: true });
 fs.copyFileSync(source, target);
+fs.chmodSync(target, 0o644);
 console.log(`Copied sql-wasm.wasm to ${target}`);

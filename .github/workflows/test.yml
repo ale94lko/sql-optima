@@ -1,21 +1,18 @@
-name: Test SQL Optima Action
+name: SQL Optima dispatch demo
 
+# API / manual demos only. Unit tests, lint, build, and engine integrations live in ci.yml.
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
   repository_dispatch:
     types: [analyze-sql]
   workflow_dispatch:
 
-jobs:
-  test-postgres-analysis:
-    name: Run SQL Optima against PostgreSQL
-    runs-on: ubuntu-latest
+permissions:
+  contents: read
 
+jobs:
+  analyze-postgres:
+    name: Analyze via repository_dispatch / workflow_dispatch
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16-alpine
@@ -30,21 +27,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     steps:
-      - name: Checkout repository code
+      - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Node.js environment
+      - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies and build dist
+      - name: Install and build
         run: |
           npm ci
-          npm run test:coverage
           npm run build
 
       - name: Prepare database schema
@@ -52,8 +47,9 @@ jobs:
           PGPASSWORD: root
         run: psql -h localhost -U postgres -d test_db -f examples/seed_postgres.sql
 
-      - name: Load mixed Postgres sample
+      - name: Load sample SQL
         id: sample
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           {
@@ -62,213 +58,26 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-      - name: Run SQL Optima (sample fixtures)
+      - name: Run SQL Optima (workflow_dispatch sample)
+        if: github.event_name == 'workflow_dispatch'
         uses: ./
         with:
-          engine: 'postgres'
-          db_host: 'localhost'
+          engine: postgres
+          db_host: localhost
           db_port: '5432'
-          db_name: 'test_db'
-          db_user: 'postgres'
-          db_password: 'root'
-          sql_content: ${{ steps.sample.outputs.sql }}
-
-      - name: Run SQL Optima (API Payload Simulation)
-        if: github.event_name == 'repository_dispatch'
-        uses: ./
-        with:
-          engine: 'postgres'
-          db_host: 'localhost'
-          db_port: '5432'
-          db_name: 'test_db'
-          db_user: 'postgres'
-          db_password: 'root'
-          sql_content: ${{ github.event.client_payload.sql_code }}
-
-  test-sqlite-analysis:
-    name: Run SQL Optima against SQLite
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: |
-          npm ci
-          npm run build
-      - name: Load mixed SQLite sample
-        id: sample
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_sqlite.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-      - name: Run SQL Optima (SQLite in-memory)
-        uses: ./
-        with:
-          engine: sqlite
-          sql_content: ${{ steps.sample.outputs.sql }}
-
-  test-mariadb-analysis:
-    name: Run SQL Optima against MariaDB
-    runs-on: ubuntu-latest
-    services:
-      mariadb:
-        image: mariadb:11
-        env:
-          MYSQL_DATABASE: test_db
-          MYSQL_ROOT_PASSWORD: root
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="healthcheck.sh --connect --innodb_initialized"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: |
-          npm ci
-          npm run build
-      - name: Prepare MariaDB schema
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y default-mysql-client
-          mysql -h 127.0.0.1 -uroot -proot test_db < examples/seed_mysql.sql
-      - name: Load mixed MySQL/MariaDB sample
-        id: sample
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_mysql.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-      - name: Run SQL Optima (MariaDB)
-        uses: ./
-        with:
-          engine: mariadb
-          db_host: 127.0.0.1
-          db_port: '3306'
           db_name: test_db
-          db_user: root
+          db_user: postgres
           db_password: root
           sql_content: ${{ steps.sample.outputs.sql }}
 
-  test-mssql-analysis:
-    name: Run SQL Optima against SQL Server
-    runs-on: ubuntu-latest
-    services:
-      mssql:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: Y
-          MSSQL_SA_PASSWORD: Your_strong_Password123
-        ports:
-          - 1433:1433
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: |
-          npm ci
-          npm run build
-      - name: Wait for SQL Server and create test_db
-        run: |
-          node <<'EOF'
-          const sql = require('mssql');
-          (async () => {
-            const config = {
-              server: '127.0.0.1',
-              port: 1433,
-              user: 'sa',
-              password: 'Your_strong_Password123',
-              database: 'master',
-              options: { encrypt: false, trustServerCertificate: true },
-              connectionTimeout: 5000,
-            };
-            for (let i = 0; i < 40; i += 1) {
-              try {
-                const pool = await sql.connect(config);
-                await pool.request().query("IF DB_ID('test_db') IS NULL CREATE DATABASE test_db;");
-                await pool.close();
-                console.log('SQL Server ready');
-                process.exit(0);
-              } catch (error) {
-                console.log(`Waiting for SQL Server (${i + 1}/40): ${error.message}`);
-                await new Promise((resolve) => setTimeout(resolve, 3000));
-              }
-            }
-            console.error('SQL Server did not become ready in time');
-            process.exit(1);
-          })();
-          EOF
-      - name: Load mixed SQL Server sample
-        id: sample
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_mssql.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-      - name: Run SQL Optima (SQL Server)
+      - name: Run SQL Optima (repository_dispatch payload)
+        if: github.event_name == 'repository_dispatch'
         uses: ./
         with:
-          engine: mssql
-          db_host: 127.0.0.1
-          db_port: '1433'
+          engine: ${{ github.event.client_payload.engine || 'postgres' }}
+          db_host: localhost
+          db_port: '5432'
           db_name: test_db
-          db_user: sa
-          db_password: Your_strong_Password123
-          sql_content: ${{ steps.sample.outputs.sql }}
-
-  test-static-warehouse-linting:
-    name: Static-only BigQuery / Snowflake lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: |
-          npm ci
-          npm run build
-      - name: Load BigQuery sample
-        id: bq
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_bigquery.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-      - name: Run SQL Optima (BigQuery static-only)
-        uses: ./
-        with:
-          engine: bigquery
-          sql_content: ${{ steps.bq.outputs.sql }}
-      - name: Load Snowflake sample
-        id: sf
-        shell: bash
-        run: |
-          {
-            echo 'sql<<EOF'
-            cat examples/mixed_snowflake.sql
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-      - name: Run SQL Optima (Snowflake static-only)
-        uses: ./
-        with:
-          engine: snowflake
-          sql_content: ${{ steps.sf.outputs.sql }}
+          db_user: postgres
+          db_password: root
+          sql_content: ${{ github.event.client_payload.sql_code }}

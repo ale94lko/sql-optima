@@ -3,6 +3,7 @@
 [![Health Score](https://raw.githubusercontent.com/ale94lko/sql-optima/output/badge.svg)](https://github.com/ale94lko/sql-optima/community)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-SQL%20Optima%20Action-blue?style=flat-square&logo=github)](https://github.com/marketplace/actions/sql-optima-action)
 [![License: Source-Available (AI restricted)](https://img.shields.io/badge/License-Source--Available-blue.svg?style=flat-square)](LICENSE)
+[![CI](https://github.com/ale94lko/sql-optima/actions/workflows/ci.yml/badge.svg)](https://github.com/ale94lko/sql-optima/actions/workflows/ci.yml)
 [![Node.js CI](https://img.shields.io/badge/node.js-20.x-green?style=flat-square&logo=node.js)](https://nodejs.org/)
 
 An automated **SQL performance analyzer, schema linter, and query execution optimizer** built for GitHub Actions.
@@ -89,9 +90,9 @@ Checked-in fixtures under [`examples/`](examples/) intentionally trigger the fin
 
 ### Run against the samples
 
-#### A) In this repository’s CI (`workflow_dispatch` / push / PR)
+#### A) In this repository’s CI (`push` / PR via `ci.yml`, or `workflow_dispatch` demo)
 
-The test workflow loads [`examples/mixed_postgres.sql`](examples/mixed_postgres.sql) after seeding Postgres and posts the report to the Job Summary.
+The [CI workflow](.github/workflows/ci.yml) runs unit tests, lint, a `dist/` freshness check, and loads sample fixtures against Postgres/MySQL/MariaDB/SQLite/SQL Server (plus static BigQuery/Snowflake). Manual API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
 #### B) From a consumer workflow (inline file contents)
 
@@ -266,13 +267,16 @@ cd sql-optima
 # Install dependencies
 npm install
 
-# Run unit tests with coverage thresholds
+# Lint, unit tests, and coverage thresholds
+npm run lint
 npm test
 npm run test:coverage
 
-# Compile source files into dist/index.js
+# Compile source files into dist/index.js (commit dist/ when src/ or deps change)
 npm run build
 ```
+
+CI on pull requests runs unit tests, lint (ESLint + actionlint), a `dist/` freshness check, and multi-engine integration jobs — see [CONTRIBUTING.md](CONTRIBUTING.md#continuous-integration).
 
 ---
 
