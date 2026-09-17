@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
  * Shared SQL statement helpers for dynamic analyzers.
  */
 
@@ -183,3 +188,4 @@ module.exports = {
   resolveParserDialect,
   resolveEngineDefaults,
 };
+

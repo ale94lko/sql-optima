@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 
@@ -122,3 +127,4 @@ describe('generateMarkdownReport', () => {
     expect(report).toContain('N/A');
   });
 });
+

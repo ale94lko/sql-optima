@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
  * Formats static and dynamic analysis results into a structured GitHub Markdown report.
  */
 
@@ -124,3 +129,4 @@ module.exports = {
   generateMarkdownReport,
   escapeMarkdownTableCell,
 };
+

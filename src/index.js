@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
  * Main orchestrator function for SQL Optima Action.
  * @param {Object} [overrides] - Optional dependency overrides for unit tests.
  */
@@ -182,3 +187,4 @@ module.exports = { run };
 if (require.main === module) {
   run();
 }
+

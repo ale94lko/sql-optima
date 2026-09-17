@@ -35,7 +35,13 @@ If the primary maintainer is unavailable:
 
 ## Bus factor
 
-The active engineering bus factor is currently **1** (single maintainer). Improving this (adding a second maintainer with release rights) is tracked as a project goal in [docs/ROADMAP.md](docs/ROADMAP.md).
+Gold-level Best Practices require a bus factor of **2+** and two unassociated significant contributors. Today the active engineering bus factor is **1** ([@ale94lko](https://github.com/ale94lko)).
+
+Tracked work: add a second maintainer with triage + release rights and establish two-person review on `main` (see [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md) and [docs/ROADMAP.md](docs/ROADMAP.md)).
+
+## Authentication (2FA)
+
+Maintainers who can push to the central repository or access private vulnerability reports MUST use GitHub **two-factor authentication**. Prefer TOTP or passkeys/WebAuthn over SMS ([GitHub 2FA docs](https://docs.github.com/en/authentication/securing-your-account-with-two-factor-authentication-2fa)).
 
 ## Code of conduct
 

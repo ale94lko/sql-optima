@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
 const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
@@ -167,3 +172,4 @@ function normalizeExplainRows(result) {
 }
 
 module.exports = SqliteAnalyzer;
+

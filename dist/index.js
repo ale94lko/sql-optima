@@ -91387,6 +91387,11 @@ function extend(target) {
 /***/ 76640:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
 const { Parser } = __nccwpck_require__(6519);
 const { resolveParserDialect } = __nccwpck_require__(25824);
 
@@ -91612,10 +91617,16 @@ module.exports = {
 };
 
 
+
 /***/ }),
 
 /***/ 73800:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
 
 const sql = __nccwpck_require__(66271);
 const {
@@ -91813,10 +91824,16 @@ class MssqlAnalyzer {
 module.exports = MssqlAnalyzer;
 
 
+
 /***/ }),
 
 /***/ 90678:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
 
 const mysql = __nccwpck_require__(27588);
 const {
@@ -92021,10 +92038,16 @@ class MySQLAnalyzer {
 module.exports = MySQLAnalyzer;
 
 
+
 /***/ }),
 
 /***/ 97353:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
 
 const { Pool } = __nccwpck_require__(13273);
 const {
@@ -92206,10 +92229,16 @@ class PostgresAnalyzer {
 module.exports = PostgresAnalyzer;
 
 
+
 /***/ }),
 
 /***/ 83006:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
 
 const initSqlJs = __nccwpck_require__(135);
 const fs = __nccwpck_require__(79896);
@@ -92382,10 +92411,16 @@ function normalizeExplainRows(result) {
 module.exports = SqliteAnalyzer;
 
 
+
 /***/ }),
 
 /***/ 59315:
 /***/ ((module) => {
+
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
 
 /**
  * Formats static and dynamic analysis results into a structured GitHub Markdown report.
@@ -92515,10 +92550,16 @@ module.exports = {
 };
 
 
+
 /***/ }),
 
 /***/ 5105:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
 
 /**
  * Main orchestrator function for SQL Optima Action.
@@ -92706,10 +92747,16 @@ if (require.main === require.cache[eval('__filename')]) {
 }
 
 
+
 /***/ }),
 
 /***/ 59781:
 /***/ ((module) => {
+
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
 
 /**
  * Severity gating helpers for CI fail-on-threshold behavior.
@@ -92866,10 +92913,16 @@ module.exports = {
 };
 
 
+
 /***/ }),
 
 /***/ 25824:
 /***/ ((module) => {
+
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
 
 /**
  * Shared SQL statement helpers for dynamic analyzers.
@@ -93056,6 +93109,7 @@ module.exports = {
   resolveParserDialect,
   resolveEngineDefaults,
 };
+
 
 
 /***/ }),

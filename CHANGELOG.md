@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Governance, architecture, roadmap, assurance case, and achievements docs for Silver-level Best Practices.
 - CONTRIBUTING: DCO sign-off, coding standards, mandatory tests for major features.
 - SECURITY: advisory preferred path, response SLA, reporter credit policy.
+- Per-file SPDX/copyright headers; code review + security review docs for Gold criteria.
 
 ## [1.0.0] - 2026-09-17
 

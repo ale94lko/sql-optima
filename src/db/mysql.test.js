@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createRequire } from 'node:module';
 
@@ -183,3 +188,4 @@ describe('MySQLAnalyzer', () => {
     expect(issues[0].message).toContain('unknown_table');
   });
 });
+

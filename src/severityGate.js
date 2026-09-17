@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
  * Severity gating helpers for CI fail-on-threshold behavior.
  */
 
@@ -151,3 +156,4 @@ module.exports = {
   normalizeFailOnSeverity,
   evaluateSeverityGate,
 };
+

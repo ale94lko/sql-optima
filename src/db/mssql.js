@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
 const sql = require('mssql');
 const {
   extractSelectStatement,
@@ -192,3 +197,4 @@ class MssqlAnalyzer {
 }
 
 module.exports = MssqlAnalyzer;
+

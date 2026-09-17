@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
 const { Parser } = require('node-sql-parser');
 const { resolveParserDialect } = require('../sqlUtils');
 
@@ -221,3 +226,4 @@ module.exports = {
   analyzeStaticSQL,
   getColumnName,
 };
+

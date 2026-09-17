@@ -31,14 +31,20 @@ This installs dependencies and is enough to run tests and rebuild `dist/`.
 - JavaScript style is enforced by **ESLint** (`eslint.config.js`).
 - Run `npm run lint` locally; CI fails on lint errors.
 - Prefer small, focused PRs; match existing patterns in `src/`.
+- Every `src/**/*.js` file must keep the SPDX / copyright header:
+  `SPDX-License-Identifier: MIT` and `Copyright (c) … sql-optima contributors`.
+
+## Code review
+
+See [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md) for how reviews are conducted, what must be checked, and how small tasks are labeled for new contributors.
 
 ## Testing policy (required)
 
 As major new functionality is added, **automated tests MUST be added** to the
 Vitest suite (`npm test` / `npm run test:coverage`). Pull requests that change
 behavior without tests should explain why coverage is deferred and will usually
-be asked to add tests before merge. Target **≥80% statement coverage** on `src/`
-(currently measured with `@vitest/coverage-v8`).
+be asked to add tests before merge. Targets: **≥90% statement** and **≥80% branch**
+coverage on `src/` (measured with `@vitest/coverage-v8`).
 
 ## Quality checks
 

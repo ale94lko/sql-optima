@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
 const mysql = require('mysql2/promise');
 const {
   extractSelectStatement,
@@ -199,3 +204,4 @@ class MySQLAnalyzer {
 }
 
 module.exports = MySQLAnalyzer;
+

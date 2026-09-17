@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
 const { Pool } = require('pg');
 const {
   extractSelectStatement,
@@ -176,3 +181,4 @@ class PostgresAnalyzer {
 }
 
 module.exports = PostgresAnalyzer;
+
