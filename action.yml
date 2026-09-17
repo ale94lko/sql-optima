@@ -4,30 +4,30 @@ author: 'ale94lko'
 
 inputs:
   engine:
-    description: 'Database engine (postgres | postgresql | mysql | mariadb | sqlite | cockroachdb | aurora-postgres | aurora-mysql)'
+    description: 'Database engine (postgres | mysql | mariadb | sqlite | mssql | bigquery | snowflake | cockroachdb | aurora-postgres | aurora-mysql | …)'
     required: false
     default: 'postgres'
   sql_content:
     description: 'SQL code or script to analyze'
     required: false
   db_host:
-    description: 'Database host (ignored for sqlite in-memory analysis)'
+    description: 'Database host (ignored for sqlite and static-only engines)'
     required: false
     default: 'localhost'
   db_port:
-    description: 'Database port (5432 postgres family, 3306 mysql/mariadb; ignored for sqlite)'
+    description: 'Database port (5432 postgres family, 3306 mysql/mariadb, 1433 mssql; ignored for sqlite/static-only)'
     required: false
     default: '5432'
   db_name:
-    description: 'Database name (ignored for sqlite in-memory analysis)'
+    description: 'Database name (ignored for sqlite and static-only engines)'
     required: false
     default: 'test_db'
   db_user:
-    description: 'Database user (ignored for sqlite)'
+    description: 'Database user (ignored for sqlite and static-only engines)'
     required: false
     default: 'postgres'
   db_password:
-    description: 'Database password (ignored for sqlite)'
+    description: 'Database password (ignored for sqlite and static-only engines)'
     required: false
     default: 'root'
 

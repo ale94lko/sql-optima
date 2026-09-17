@@ -7,15 +7,15 @@
 
 An automated **SQL performance analyzer, schema linter, and query execution optimizer** built for GitHub Actions.
 
-`sql-optima` parses raw SQL code or schema files, identifies structural anti-patterns (e.g., missing primary keys or unindexed foreign keys), connects to ephemeral database containers (PostgreSQL / MySQL), and evaluates query execution plans (`EXPLAIN`) to flag sequential scans, disk sorts, and full table scans.
+`sql-optima` parses raw SQL code or schema files, identifies structural anti-patterns (e.g., missing primary keys or unindexed foreign keys), connects to ephemeral database containers (PostgreSQL / MySQL / MariaDB / SQL Server) or an in-memory SQLite engine, and evaluates query execution plans (`EXPLAIN` / `SHOWPLAN`) to flag sequential scans, disk sorts, and full table scans. BigQuery and Snowflake are supported for **static dialect linting** only.
 
 ---
 
 ## Key Features
 
-- **Multi-Engine Support:** Works with **PostgreSQL** (including CockroachDB / Aurora PostgreSQL wire-compatible aliases), **MySQL / MariaDB / Aurora MySQL**, and **SQLite** (in-memory, no service container).
+- **Multi-Engine Support:** Works with **PostgreSQL** (including CockroachDB / Aurora PostgreSQL wire-compatible aliases), **MySQL / MariaDB / Aurora MySQL**, **SQLite** (in-memory), and **SQL Server** (`mssql`). **BigQuery** and **Snowflake** run static AST linting only.
 - **Static AST Analysis:** Inspects SQL syntax without needing a live database to detect missing primary keys, unindexed foreign key candidates, `SELECT *` usages, and leading wildcard `LIKE` queries.
-- **Dynamic Execution Analysis:** Runs engine-specific explain plans (`EXPLAIN` / `EXPLAIN QUERY PLAN`) against live or in-memory databases to inspect scans, sorts, and high-cost access paths.
+- **Dynamic Execution Analysis:** Runs engine-specific explain plans (`EXPLAIN` / `EXPLAIN QUERY PLAN` / `SHOWPLAN_ALL`) against live or in-memory databases. Schema statements (`CREATE` / `INSERT` / …) in `sql_content` are applied before EXPLAIN for Postgres, MySQL/MariaDB, SQLite, and SQL Server.
 - **Dual Triggering:** Supports execution via standard workflow inputs or directly through external API calls (`repository_dispatch`).
 - **GitHub Step Summaries:** Publishes markdown reports directly to `$GITHUB_STEP_SUMMARY` and Pull Request checks.
 
@@ -25,13 +25,13 @@ An automated **SQL performance analyzer, schema linter, and query execution opti
 
 | Input | Description | Required | Default |
 | :--- | :--- | :---: | :--- |
-| `engine` | Database engine (`postgres`, `mysql`, `mariadb`, `sqlite`, `cockroachdb`, `aurora-postgres`, `aurora-mysql`, …) | `false` | `postgres` |
+| `engine` | Database engine (`postgres`, `mysql`, `mariadb`, `sqlite`, `mssql`, `bigquery`, `snowflake`, `cockroachdb`, `aurora-postgres`, `aurora-mysql`, …) | `false` | `postgres` |
 | `sql_content` | SQL query or schema definition script to analyze | `false` | `""` |
-| `db_host` | Database hostname (ignored for `sqlite`) | `false` | `localhost` |
-| `db_port` | Database connection port (`5432` / `3306`; ignored for `sqlite`) | `false` | `5432` / `3306` |
-| `db_name` | Test database name (ignored for `sqlite`) | `false` | `test_db` |
-| `db_user` | Database user (ignored for `sqlite`) | `false` | `postgres` / `root` |
-| `db_password` | Database user password (ignored for `sqlite`) | `false` | `root` |
+| `db_host` | Database hostname (ignored for `sqlite` / static-only engines) | `false` | `localhost` |
+| `db_port` | Database connection port (`5432` / `3306` / `1433`; ignored for `sqlite` / static-only) | `false` | engine default |
+| `db_name` | Test database name (ignored for `sqlite` / static-only) | `false` | `test_db` |
+| `db_user` | Database user (ignored for `sqlite` / static-only) | `false` | engine default |
+| `db_password` | Database user password (ignored for `sqlite` / static-only) | `false` | engine default |
 
 ---
 
@@ -54,8 +54,12 @@ Checked-in fixtures under [`examples/`](examples/) intentionally trigger the fin
 | [`examples/mixed_postgres.sql`](examples/mixed_postgres.sql) | Combined schema + query demo for PostgreSQL |
 | [`examples/mixed_mysql.sql`](examples/mixed_mysql.sql) | Combined schema + query demo for MySQL / MariaDB |
 | [`examples/mixed_sqlite.sql`](examples/mixed_sqlite.sql) | Combined schema + query demo for SQLite (in-memory EXPLAIN) |
+| [`examples/mixed_mssql.sql`](examples/mixed_mssql.sql) | Combined schema + query demo for SQL Server |
+| [`examples/mixed_bigquery.sql`](examples/mixed_bigquery.sql) | Static-only BigQuery dialect sample |
+| [`examples/mixed_snowflake.sql`](examples/mixed_snowflake.sql) | Static-only Snowflake dialect sample |
 | [`examples/seed_postgres.sql`](examples/seed_postgres.sql) | Seed `users` / `orders` for Postgres `EXPLAIN` |
 | [`examples/seed_mysql.sql`](examples/seed_mysql.sql) | Seed `users` / `orders` for MySQL / MariaDB `EXPLAIN` |
+| [`examples/seed_mssql.sql`](examples/seed_mssql.sql) | Seed `users` / `orders` for SQL Server `SHOWPLAN` |
 
 ### Expected findings
 
@@ -66,18 +70,21 @@ Checked-in fixtures under [`examples/`](examples/) intentionally trigger the fin
 | `WILDCARD_SELECT` | LOW | `SELECT * FROM orders …` | Project only required columns |
 | `LEADING_WILDCARD_LIKE` | MEDIUM | `email LIKE '%example.com'` | Avoid leading `%`, or use trigram/full-text search |
 | `FILTER_COLUMN_INDEX_CANDIDATE` | INFO | Columns used in `WHERE` | Consider indexes on hot filter columns |
-| `SEQUENTIAL_SCAN` / `FULL_TABLE_SCAN` / `SQLITE_TABLE_SCAN` | MEDIUM–HIGH | Dynamic explain on unindexed filters | Index matching predicates |
+| `SEQUENTIAL_SCAN` / `FULL_TABLE_SCAN` / `SQLITE_TABLE_SCAN` / `MSSQL_TABLE_SCAN` | MEDIUM–HIGH | Dynamic explain on unindexed filters | Index matching predicates |
 
-> **Note:** For PostgreSQL/MySQL, `CREATE TABLE` in `sql_content` is linted statically but is **not** applied to the ephemeral database yet (see [#7](https://github.com/ale94lko/sql-optima/issues/7)). Apply `examples/seed_*.sql` first. **SQLite** is different: the Action applies `CREATE`/`INSERT` from the same script into an in-memory DB before `EXPLAIN QUERY PLAN`.
+> **Note:** For PostgreSQL, MySQL/MariaDB, SQLite, and SQL Server, safe `CREATE` / `INSERT` / `ALTER TABLE` statements in `sql_content` are applied before EXPLAIN/SHOWPLAN (destructive admin DDL like `DROP DATABASE` is blocked). Pre-seeding with `examples/seed_*.sql` remains optional for shared CI tables. **BigQuery** and **Snowflake** are static-only (no live warehouse adapter yet).
 
 ### Engine compatibility notes
 
 | Engine input | Static dialect | Dynamic analyzer |
 | :--- | :--- | :--- |
-| `postgres`, `postgresql` | PostgreSQL | `pg` + `EXPLAIN (ANALYZE, … FORMAT JSON)` |
+| `postgres`, `postgresql` | PostgreSQL | `pg` + `EXPLAIN (ANALYZE, … FORMAT JSON)` (+ apply DDL from `sql_content`) |
 | `cockroach`, `cockroachdb`, `aurora-postgres` | PostgreSQL | Same Postgres analyzer (wire-compatible targets) |
-| `mysql`, `mariadb`, `aurora-mysql` | MySQL | `mysql2` + `EXPLAIN FORMAT=JSON` |
+| `mysql`, `mariadb`, `aurora-mysql` | MySQL | `mysql2` + `EXPLAIN FORMAT=JSON` (+ apply DDL from `sql_content`) |
 | `sqlite`, `sqlite3` | SQLite | In-memory `sql.js` + `EXPLAIN QUERY PLAN` |
+| `mssql`, `sqlserver`, `tsql` | T-SQL (`transactsql`) | `mssql` + `SET SHOWPLAN_ALL` (+ apply DDL from `sql_content`) |
+| `bigquery`, `bq` | BigQuery | Static-only (no live EXPLAIN) |
+| `snowflake` | Snowflake | Static-only (no live EXPLAIN) |
 | Other values | MySQL fallback for parsing when unknown | Clear “not currently supported” dynamic reason |
 
 ### Run against the samples

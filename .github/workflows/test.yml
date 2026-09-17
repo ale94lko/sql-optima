@@ -161,3 +161,114 @@ jobs:
           db_user: root
           db_password: root
           sql_content: ${{ steps.sample.outputs.sql }}
+
+  test-mssql-analysis:
+    name: Run SQL Optima against SQL Server
+    runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: Your_strong_Password123
+        ports:
+          - 1433:1433
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: |
+          npm ci
+          npm run build
+      - name: Wait for SQL Server and create test_db
+        run: |
+          node <<'EOF'
+          const sql = require('mssql');
+          (async () => {
+            const config = {
+              server: '127.0.0.1',
+              port: 1433,
+              user: 'sa',
+              password: 'Your_strong_Password123',
+              database: 'master',
+              options: { encrypt: false, trustServerCertificate: true },
+              connectionTimeout: 5000,
+            };
+            for (let i = 0; i < 40; i += 1) {
+              try {
+                const pool = await sql.connect(config);
+                await pool.request().query("IF DB_ID('test_db') IS NULL CREATE DATABASE test_db;");
+                await pool.close();
+                console.log('SQL Server ready');
+                process.exit(0);
+              } catch (error) {
+                console.log(`Waiting for SQL Server (${i + 1}/40): ${error.message}`);
+                await new Promise((resolve) => setTimeout(resolve, 3000));
+              }
+            }
+            console.error('SQL Server did not become ready in time');
+            process.exit(1);
+          })();
+          EOF
+      - name: Load mixed SQL Server sample
+        id: sample
+        shell: bash
+        run: |
+          {
+            echo 'sql<<EOF'
+            cat examples/mixed_mssql.sql
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      - name: Run SQL Optima (SQL Server)
+        uses: ./
+        with:
+          engine: mssql
+          db_host: 127.0.0.1
+          db_port: '1433'
+          db_name: test_db
+          db_user: sa
+          db_password: Your_strong_Password123
+          sql_content: ${{ steps.sample.outputs.sql }}
+
+  test-static-warehouse-linting:
+    name: Static-only BigQuery / Snowflake lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: |
+          npm ci
+          npm run build
+      - name: Load BigQuery sample
+        id: bq
+        shell: bash
+        run: |
+          {
+            echo 'sql<<EOF'
+            cat examples/mixed_bigquery.sql
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      - name: Run SQL Optima (BigQuery static-only)
+        uses: ./
+        with:
+          engine: bigquery
+          sql_content: ${{ steps.bq.outputs.sql }}
+      - name: Load Snowflake sample
+        id: sf
+        shell: bash
+        run: |
+          {
+            echo 'sql<<EOF'
+            cat examples/mixed_snowflake.sql
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      - name: Run SQL Optima (Snowflake static-only)
+        uses: ./
+        with:
+          engine: snowflake
+          sql_content: ${{ steps.sf.outputs.sql }}
