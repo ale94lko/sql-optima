@@ -38,15 +38,9 @@ jobs:
   build:
     name: Build dist
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # Same-repo PRs: check out the head branch so we can push a dist refresh.
-          ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -59,21 +53,14 @@ jobs:
 
       - name: Build Action bundle and assert dist/ is current
         run: |
+          # Ignore executable-bit noise on copied wasm/binaries across hosts.
+          git config core.fileMode false
           npm run build
-          if git diff --quiet -- dist; then
-            echo "dist/ is up to date"
-            exit 0
+          if ! git diff --exit-code -- dist; then
+            echo "::error::dist/ is out of date. Run npm run build and commit the result."
+            git diff --stat -- dist || true
+            exit 1
           fi
-
-          echo "::warning::dist/ drifted from the Ubuntu ncc build; refreshing committed artifacts."
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dist
-          git commit -m "build: refresh dist from CI (ubuntu)"
-          git push
-          # Re-run is triggered by the push; fail this job so a stale local dist cannot go green silently.
-          echo "::error::dist/ was out of date and has been refreshed on the branch. Re-run / wait for the next CI push."
-          exit 1
 
   lint:
     name: Lint
