@@ -17,6 +17,8 @@ async function run(overrides = {}) {
     overrides.formatter || require('./formatter');
   const sqlUtils = overrides.sqlUtils || require('./sqlUtils');
   const { resolveEngineDefaults, isStaticOnlyEngine } = sqlUtils;
+  const severityGate = overrides.severityGate || require('./severityGate');
+  const { evaluateSeverityGate } = severityGate;
 
   let dbAnalyzer = null;
 
@@ -145,6 +147,24 @@ async function run(overrides = {}) {
     // 9. Output to GitHub Step Summary ($GITHUB_STEP_SUMMARY) and Action Outputs
     await core.summary.addRaw(markdownReport).write();
     core.setOutput('report', markdownReport);
+
+    const allIssues = [
+      ...staticIssues,
+      ...(dynamicResult.issues || []),
+    ];
+    const gate = evaluateSeverityGate({
+      issues: allIssues,
+      failOnSeverity: core.getInput('fail_on_severity') || 'none',
+      failOnTypes: core.getInput('fail_on_types') || '',
+    });
+
+    core.setOutput('issue_count', String(gate.issueCount));
+    core.setOutput('highest_severity', gate.highestSeverity);
+
+    if (gate.shouldFail) {
+      core.setFailed(gate.reason);
+      return;
+    }
 
     core.info('SQL Optima analysis successfully completed and posted to Step Summary.');
   } catch (error) {

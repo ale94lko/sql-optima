@@ -33,10 +33,22 @@ inputs:
     description: 'Database password (ignored for sqlite and static-only engines)'
     required: false
     default: 'root'
+  fail_on_severity:
+    description: 'Fail the job if any finding meets or exceeds this severity (none | info | low | medium | high | critical)'
+    required: false
+    default: 'none'
+  fail_on_types:
+    description: 'Comma-separated issue types that always fail the job (e.g. MISSING_PRIMARY_KEY,WILDCARD_SELECT)'
+    required: false
+    default: ''
 
 outputs:
   report:
     description: 'Generated Markdown report containing optimization suggestions'
+  issue_count:
+    description: 'Total number of static + dynamic findings'
+  highest_severity:
+    description: 'Highest finding severity (NONE | INFO | LOW | MEDIUM | HIGH | CRITICAL)'
 
 runs:
   using: 'node24'

@@ -34,8 +34,12 @@ An automated **SQL performance analyzer, schema linter, and query execution opti
 | `db_name` | Test database name (ignored for `sqlite` / static-only) | `false` | `test_db` |
 | `db_user` | Database user (ignored for `sqlite` / static-only) | `false` | engine default |
 | `db_password` | Database user password (ignored for `sqlite` / static-only) | `false` | engine default |
+| `fail_on_severity` | Fail the job if any finding ≥ this severity (`none`, `info`, `low`, `medium`, `high`, `critical`) | `false` | `none` |
+| `fail_on_types` | Comma-separated issue types that always fail (e.g. `MISSING_PRIMARY_KEY,WILDCARD_SELECT`) | `false` | `""` |
 
 SQL source resolution order: `sql_file` → `sql_content` → `repository_dispatch` `client_payload.sql_code` / `sql_content`.
+
+Default `fail_on_severity: none` keeps the Action warn-only (report only). Raise the threshold to use it as a CI gate.
 
 ---
 
@@ -44,6 +48,8 @@ SQL source resolution order: `sql_file` → `sql_content` → `repository_dispat
 | Output | Description |
 | :--- | :--- |
 | `report` | The full generated Markdown report containing static and dynamic findings. |
+| `issue_count` | Total number of static + dynamic findings. |
+| `highest_severity` | Highest finding severity (`NONE`, `INFO`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`). |
 
 ---
 
@@ -240,6 +246,36 @@ jobs:
           db_port: '3306'
           db_user: 'root'
           db_password: 'root'
+```
+
+### 3. CI gate: warn-only vs fail on HIGH
+
+See the full sample at [`examples/workflows/severity-gate.yml`](examples/workflows/severity-gate.yml).
+
+```yaml
+# Warn-only (default): always green; inspect Step Summary / outputs
+- name: Analyze (warn-only)
+  id: warn
+  uses: ale94lko/sql-optima@v1
+  with:
+    engine: sqlite
+    sql_file: examples/mixed_sqlite.sql
+    fail_on_severity: none
+
+# CI gate: fail the job when any finding is HIGH or above
+- name: Analyze (fail on HIGH)
+  uses: ale94lko/sql-optima@v1
+  with:
+    engine: sqlite
+    sql_file: examples/mixed_sqlite.sql
+    fail_on_severity: high
+    # optional: always fail on specific types regardless of severity
+    # fail_on_types: WILDCARD_SELECT,MISSING_PRIMARY_KEY
+
+- name: Use outputs downstream
+  run: |
+    echo "issues=${{ steps.warn.outputs.issue_count }}"
+    echo "highest=${{ steps.warn.outputs.highest_severity }}"
 ```
 
 ---

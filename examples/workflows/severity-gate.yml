@@ -1,0 +1,50 @@
+# Sample: warn-only vs fail-on-severity CI gate
+#
+# Copy into your repo (or adapt) to see both modes side by side.
+# Uses the checked-in examples/mixed_sqlite.sql fixture (no external DB).
+
+name: SQL Optima severity gate sample
+
+on:
+  workflow_dispatch:
+
+jobs:
+  warn-only:
+    name: Warn-only (fail_on_severity=none)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Analyze SQL (report only)
+        id: analyze
+        uses: ale94lko/sql-optima@v1
+        with:
+          engine: sqlite
+          sql_file: examples/mixed_sqlite.sql
+          fail_on_severity: none
+
+      - name: Print outputs
+        run: |
+          echo "issue_count=${{ steps.analyze.outputs.issue_count }}"
+          echo "highest_severity=${{ steps.analyze.outputs.highest_severity }}"
+
+  fail-on-high:
+    name: Fail on HIGH+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Analyze SQL (CI gate)
+        id: analyze
+        uses: ale94lko/sql-optima@v1
+        with:
+          engine: sqlite
+          sql_file: examples/mixed_sqlite.sql
+          fail_on_severity: high
+          # fail_on_types: WILDCARD_SELECT,MISSING_PRIMARY_KEY
+
+      - name: Print outputs
+        if: always()
+        run: |
+          echo "issue_count=${{ steps.analyze.outputs.issue_count }}"
+          echo "highest_severity=${{ steps.analyze.outputs.highest_severity }}"

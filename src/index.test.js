@@ -350,4 +350,60 @@ describe('run', () => {
     expect(core.setFailed).toHaveBeenCalledWith('SQL Optima Action failed: summary failed');
     expect(postgresAnalyzer.close).toHaveBeenCalled();
   });
+
+  it('exposes issue_count and highest_severity without failing when fail_on_severity is none', async () => {
+    analyzeStaticSQL.mockReturnValue([
+      { type: 'MISSING_PRIMARY_KEY', severity: 'HIGH' },
+      { type: 'WILDCARD_SELECT', severity: 'LOW' },
+    ]);
+
+    await run(deps());
+
+    expect(core.setOutput).toHaveBeenCalledWith('issue_count', '2');
+    expect(core.setOutput).toHaveBeenCalledWith('highest_severity', 'HIGH');
+    expect(core.setFailed).not.toHaveBeenCalled();
+  });
+
+  it('fails the action when findings meet fail_on_severity', async () => {
+    analyzeStaticSQL.mockReturnValue([
+      { type: 'MISSING_PRIMARY_KEY', severity: 'HIGH' },
+    ]);
+    core.getInput.mockImplementation((name) => {
+      const values = {
+        engine: 'postgres',
+        sql_content: 'SELECT 1;',
+        fail_on_severity: 'high',
+      };
+      return values[name] || '';
+    });
+
+    await run(deps());
+
+    expect(core.setOutput).toHaveBeenCalledWith('issue_count', '1');
+    expect(core.setOutput).toHaveBeenCalledWith('highest_severity', 'HIGH');
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('fail_on_severity=high'),
+    );
+  });
+
+  it('fails the action when findings match fail_on_types', async () => {
+    analyzeStaticSQL.mockReturnValue([
+      { type: 'WILDCARD_SELECT', severity: 'LOW' },
+    ]);
+    core.getInput.mockImplementation((name) => {
+      const values = {
+        engine: 'sqlite',
+        sql_content: 'SELECT * FROM t;',
+        fail_on_severity: 'none',
+        fail_on_types: 'WILDCARD_SELECT',
+      };
+      return values[name] || '';
+    });
+
+    await run(deps());
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('fail_on_types'),
+    );
+  });
 });
