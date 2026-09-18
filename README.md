@@ -317,6 +317,8 @@ See the full sample at [`examples/workflows/severity-gate.yml`](examples/workflo
 
 ## Local Development & Building
 
+Copy [`.env.example`](.env.example) for local Action/DB input placeholders (`ENGINE`, `SQL_FILE`, `DB_*`). Leave password and unused DB fields empty; do not commit a real `.env`. For a database-free sanity check, run the [local static smoke check](#d-local-static-smoke-check-no-database).
+
 To build and compile the distribution bundle locally:
 
 Requires **Node.js 24+** (`engines.node` in `package.json`; matches Action `runs.using: node24` and CI).
