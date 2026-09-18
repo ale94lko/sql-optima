@@ -109,6 +109,7 @@ describe('run', () => {
   it('uses sql_content from repository_dispatch when sql_code and inputs are absent', async () => {
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'mariadb';
+      if (name === 'db_password') return 'secret';
       return '';
     });
     github.context.payload = {
@@ -165,6 +166,7 @@ describe('run', () => {
       if (name === 'engine') return 'postgres';
       if (name === 'sql_file') return 'examples/mixed_postgres.sql';
       if (name === 'sql_content') return 'SELECT id FROM input_table;';
+      if (name === 'db_password') return 'secret';
       return '';
     });
     github.context.payload = {
@@ -184,6 +186,7 @@ describe('run', () => {
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'postgres';
       if (name === 'sql_content') return 'SELECT id FROM input_table;';
+      if (name === 'db_password') return 'secret';
       return '';
     });
     github.context.payload = {
@@ -201,6 +204,7 @@ describe('run', () => {
   it('uses repository_dispatch payload when inputs are empty', async () => {
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'postgres';
+      if (name === 'db_password') return 'secret';
       return '';
     });
     github.context.payload = {
@@ -220,10 +224,34 @@ describe('run', () => {
     expect(postgresAnalyzer.close).toHaveBeenCalled();
   });
 
+  it('fails when a live engine is missing db_password', async () => {
+    for (const engine of ['postgres', 'mysql', 'mssql']) {
+      core.setFailed.mockClear();
+      PostgresAnalyzer.mockClear();
+      MySQLAnalyzer.mockClear();
+      MssqlAnalyzer.mockClear();
+      core.getInput.mockImplementation((name) => {
+        if (name === 'engine') return engine;
+        if (name === 'sql_content') return 'SELECT 1;';
+        return '';
+      });
+
+      await run(deps());
+
+      expect(core.setFailed).toHaveBeenCalledWith(
+        expect.stringContaining('db_password is required'),
+      );
+      expect(PostgresAnalyzer).not.toHaveBeenCalled();
+      expect(MySQLAnalyzer).not.toHaveBeenCalled();
+      expect(MssqlAnalyzer).not.toHaveBeenCalled();
+    }
+  });
+
   it('runs mysql analysis with default mysql connection inputs', async () => {
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'mysql';
       if (name === 'sql_content') return 'SELECT 1;';
+      if (name === 'db_password') return 'secret';
       return '';
     });
 
@@ -270,6 +298,7 @@ describe('run', () => {
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'cockroachdb';
       if (name === 'sql_content') return 'SELECT 1;';
+      if (name === 'db_password') return 'secret';
       return '';
     });
 
@@ -282,6 +311,7 @@ describe('run', () => {
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'mssql';
       if (name === 'sql_content') return 'SELECT 1;';
+      if (name === 'db_password') return 'secret';
       return '';
     });
 
@@ -291,6 +321,7 @@ describe('run', () => {
       expect.objectContaining({
         port: 1433,
         user: 'sa',
+        password: 'secret',
       }),
     );
     expect(mssqlAnalyzer.testConnection).toHaveBeenCalled();
@@ -377,6 +408,7 @@ describe('run', () => {
       const values = {
         engine: 'postgres',
         sql_content: 'SELECT 1;',
+        db_password: 'secret',
         fail_on_severity: 'high',
       };
       return values[name] || '';

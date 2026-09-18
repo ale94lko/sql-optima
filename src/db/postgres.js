@@ -28,7 +28,7 @@ class PostgresAnalyzer {
         port: config.port || 5432,
         database: config.database || 'test_db',
         user: config.user || 'postgres',
-        password: config.password || 'root',
+        password: config.password || '',
         connectionTimeoutMillis: 5000,
         idleTimeoutMillis: 10000,
         max: 5,

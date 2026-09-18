@@ -32,9 +32,9 @@ inputs:
     required: false
     default: 'postgres'
   db_password:
-    description: 'Database password (ignored for sqlite and static-only engines)'
+    description: 'Database password (required for live engines: postgres/mysql/mssql families; ignored for sqlite and static-only)'
     required: false
-    default: 'root'
+    default: ''
   fail_on_severity:
     description: 'Fail the job if any finding meets or exceeds this severity (none | info | low | medium | high | critical)'
     required: false

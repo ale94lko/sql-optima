@@ -150,7 +150,39 @@ function isStaticOnlyEngine(engine) {
 }
 
 /**
- * Default connection hints per engine family.
+ * Live engines that connect to a real database and therefore require db_password.
+ * @param {string} engine
+ * @returns {boolean}
+ */
+function requiresLivePassword(engine) {
+  const normalized = (engine || '').toLowerCase();
+  if (!normalized || normalized === 'sqlite' || normalized === 'sqlite3') {
+    return false;
+  }
+  if (isStaticOnlyEngine(normalized)) {
+    return false;
+  }
+
+  return (
+    normalized === 'postgres' ||
+    normalized === 'postgresql' ||
+    normalized === 'cockroach' ||
+    normalized === 'cockroachdb' ||
+    normalized === 'aurora-postgres' ||
+    normalized === 'aurora_postgresql' ||
+    normalized === 'mysql' ||
+    normalized === 'mariadb' ||
+    normalized === 'aurora-mysql' ||
+    normalized === 'mssql' ||
+    normalized === 'sqlserver' ||
+    normalized === 'sql-server' ||
+    normalized === 'transactsql' ||
+    normalized === 'tsql'
+  );
+}
+
+/**
+ * Default connection hints per engine family (no embedded passwords).
  * @param {string} engine
  * @returns {{ port: string, user: string, password: string }}
  */
@@ -158,7 +190,7 @@ function resolveEngineDefaults(engine) {
   const normalized = (engine || 'postgres').toLowerCase();
 
   if (normalized === 'mysql' || normalized === 'mariadb' || normalized === 'aurora-mysql') {
-    return { port: '3306', user: 'root', password: 'root' };
+    return { port: '3306', user: 'root', password: '' };
   }
 
   if (normalized === 'sqlite' || normalized === 'sqlite3') {
@@ -172,10 +204,10 @@ function resolveEngineDefaults(engine) {
     normalized === 'transactsql' ||
     normalized === 'tsql'
   ) {
-    return { port: '1433', user: 'sa', password: 'Your_strong_Password123' };
+    return { port: '1433', user: 'sa', password: '' };
   }
 
-  return { port: '5432', user: 'postgres', password: 'root' };
+  return { port: '5432', user: 'postgres', password: '' };
 }
 
 module.exports = {
@@ -185,6 +217,7 @@ module.exports = {
   stripLeadingComments,
   isBlockedSchemaStatement,
   isStaticOnlyEngine,
+  requiresLivePassword,
   resolveParserDialect,
   resolveEngineDefaults,
 };

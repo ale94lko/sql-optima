@@ -21,7 +21,8 @@ async function run(overrides = {}) {
   const { generateMarkdownReport } =
     overrides.formatter || require('./formatter');
   const sqlUtils = overrides.sqlUtils || require('./sqlUtils');
-  const { resolveEngineDefaults, isStaticOnlyEngine } = sqlUtils;
+  const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword } =
+    sqlUtils;
   const severityGate = overrides.severityGate || require('./severityGate');
   const { evaluateSeverityGate } = severityGate;
 
@@ -73,14 +74,22 @@ async function run(overrides = {}) {
     const staticIssues = analyzeStaticSQL(sqlContent, engine);
     core.info(`Static analysis complete. Found ${staticIssues.length} potential issue(s).`);
 
-    // 5. Configure Database connection options
+    // 5. Configure Database connection options (no embedded password defaults)
     const defaults = resolveEngineDefaults(engine);
+    const password = (core.getInput('db_password') || '').trim();
+    if (requiresLivePassword(engine) && !password) {
+      core.setFailed(
+        `db_password is required for live engine "${engine}". Pass it as an Action input; sql-optima does not embed default database passwords.`,
+      );
+      return;
+    }
+
     const dbConfig = {
       host: core.getInput('db_host') || 'localhost',
       port: parseInt(core.getInput('db_port') || defaults.port, 10),
       database: core.getInput('db_name') || 'test_db',
       user: core.getInput('db_user') || defaults.user,
-      password: core.getInput('db_password') || defaults.password || 'root',
+      password,
     };
 
     // 6. Select and initialize the DB analyzer engine

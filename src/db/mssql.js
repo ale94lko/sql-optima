@@ -27,7 +27,7 @@ class MssqlAnalyzer {
       port: config.port || 1433,
       database: config.database || 'test_db',
       user: config.user || 'sa',
-      password: config.password || 'Your_strong_Password123',
+      password: config.password || '',
       options: {
         encrypt: false,
         trustServerCertificate: true,

@@ -12,6 +12,7 @@ const {
   extractSchemaStatements,
   isBlockedSchemaStatement,
   isStaticOnlyEngine,
+  requiresLivePassword,
   resolveParserDialect,
   resolveEngineDefaults,
 } = require('./sqlUtils');
@@ -57,11 +58,11 @@ describe('sqlUtils', () => {
     expect(isStaticOnlyEngine('mssql')).toBe(false);
   });
 
-  it('resolves connection defaults', () => {
+  it('resolves connection defaults without embedding passwords', () => {
     expect(resolveEngineDefaults('mariadb')).toEqual({
       port: '3306',
       user: 'root',
-      password: 'root',
+      password: '',
     });
     expect(resolveEngineDefaults('sqlite')).toEqual({
       port: '0',
@@ -71,13 +72,25 @@ describe('sqlUtils', () => {
     expect(resolveEngineDefaults('postgres')).toEqual({
       port: '5432',
       user: 'postgres',
-      password: 'root',
+      password: '',
     });
     expect(resolveEngineDefaults('mssql')).toEqual({
       port: '1433',
       user: 'sa',
-      password: 'Your_strong_Password123',
+      password: '',
     });
+    expect(JSON.stringify(resolveEngineDefaults('postgres'))).not.toMatch(
+      /Your_strong_Password123/,
+    );
+  });
+
+  it('requires an explicit password only for live database engines', () => {
+    expect(requiresLivePassword('postgres')).toBe(true);
+    expect(requiresLivePassword('mysql')).toBe(true);
+    expect(requiresLivePassword('mssql')).toBe(true);
+    expect(requiresLivePassword('sqlite')).toBe(false);
+    expect(requiresLivePassword('bigquery')).toBe(false);
+    expect(requiresLivePassword('oracle')).toBe(false);
   });
 });
 

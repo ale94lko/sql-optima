@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vitest coverage gates raised to statements/lines/functions ≥90% and branches ≥80% (OpenSSF Gold).
 - Governance lists a second maintainer and documents non-author review.
 - OpenSSF Best Practices badge raised to **Gold** ([project 14693](https://www.bestpractices.dev/projects/14693)).
+- Live engines require explicit `db_password`; source no longer embeds default credentials ([#44](https://github.com/ale94lko/sql-optima/issues/44)).
 
 ## [1.0.0] - 2026-09-18
 

@@ -68,13 +68,15 @@ Prefer SHA-pinning in high-assurance workflows; use `@v1` for Marketplace-style 
 | `db_port` | Database connection port (`5432` / `3306` / `1433`; ignored for `sqlite` / static-only) | `false` | engine default |
 | `db_name` | Test database name (ignored for `sqlite` / static-only) | `false` | `test_db` |
 | `db_user` | Database user (ignored for `sqlite` / static-only) | `false` | engine default |
-| `db_password` | Database user password (ignored for `sqlite` / static-only) | `false` | engine default |
+| `db_password` | Database user password (**required** for live engines; ignored for `sqlite` / static-only) | `false` | `""` |
 | <a id="input-fail-on-severity"></a>`fail_on_severity` | Fail the job if any finding ≥ this severity (`none`, `info`, `low`, `medium`, `high`, `critical`) | `false` | `none` |
 | <a id="input-fail-on-types"></a>`fail_on_types` | Comma-separated issue types that always fail (e.g. `MISSING_PRIMARY_KEY,WILDCARD_SELECT`) | `false` | `""` |
 
 SQL source resolution order: `sql_file` → `sql_content` → `repository_dispatch` `client_payload.sql_code` / `sql_content`.
 
 Default `fail_on_severity: none` keeps the Action warn-only (report only). Raise the threshold to use it as a CI gate.
+
+Live engines (`postgres` / `mysql` / `mssql` families) require an explicit [`db_password`](#inputs); the Action does not embed default credentials.
 
 ---
 

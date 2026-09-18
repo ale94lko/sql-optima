@@ -91652,7 +91652,7 @@ class MssqlAnalyzer {
       port: config.port || 1433,
       database: config.database || 'test_db',
       user: config.user || 'sa',
-      password: config.password || 'Your_strong_Password123',
+      password: config.password || '',
       options: {
         encrypt: false,
         trustServerCertificate: true,
@@ -91860,7 +91860,7 @@ class MySQLAnalyzer {
         port: config.port || 3306,
         database: config.database || 'test_db',
         user: config.user || 'root',
-        password: config.password || 'root',
+        password: config.password || '',
         waitForConnections: true,
         connectionLimit: 5,
         connectTimeout: 5000,
@@ -92074,7 +92074,7 @@ class PostgresAnalyzer {
         port: config.port || 5432,
         database: config.database || 'test_db',
         user: config.user || 'postgres',
-        password: config.password || 'root',
+        password: config.password || '',
         connectionTimeoutMillis: 5000,
         idleTimeoutMillis: 10000,
         max: 5,
@@ -92579,7 +92579,8 @@ async function run(overrides = {}) {
   const { generateMarkdownReport } =
     overrides.formatter || __nccwpck_require__(59315);
   const sqlUtils = overrides.sqlUtils || __nccwpck_require__(25824);
-  const { resolveEngineDefaults, isStaticOnlyEngine } = sqlUtils;
+  const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword } =
+    sqlUtils;
   const severityGate = overrides.severityGate || __nccwpck_require__(59781);
   const { evaluateSeverityGate } = severityGate;
 
@@ -92631,14 +92632,22 @@ async function run(overrides = {}) {
     const staticIssues = analyzeStaticSQL(sqlContent, engine);
     core.info(`Static analysis complete. Found ${staticIssues.length} potential issue(s).`);
 
-    // 5. Configure Database connection options
+    // 5. Configure Database connection options (no embedded password defaults)
     const defaults = resolveEngineDefaults(engine);
+    const password = (core.getInput('db_password') || '').trim();
+    if (requiresLivePassword(engine) && !password) {
+      core.setFailed(
+        `db_password is required for live engine "${engine}". Pass it as an Action input; sql-optima does not embed default database passwords.`,
+      );
+      return;
+    }
+
     const dbConfig = {
       host: core.getInput('db_host') || 'localhost',
       port: parseInt(core.getInput('db_port') || defaults.port, 10),
       database: core.getInput('db_name') || 'test_db',
       user: core.getInput('db_user') || defaults.user,
-      password: core.getInput('db_password') || defaults.password || 'root',
+      password,
     };
 
     // 6. Select and initialize the DB analyzer engine
@@ -93071,7 +93080,39 @@ function isStaticOnlyEngine(engine) {
 }
 
 /**
- * Default connection hints per engine family.
+ * Live engines that connect to a real database and therefore require db_password.
+ * @param {string} engine
+ * @returns {boolean}
+ */
+function requiresLivePassword(engine) {
+  const normalized = (engine || '').toLowerCase();
+  if (!normalized || normalized === 'sqlite' || normalized === 'sqlite3') {
+    return false;
+  }
+  if (isStaticOnlyEngine(normalized)) {
+    return false;
+  }
+
+  return (
+    normalized === 'postgres' ||
+    normalized === 'postgresql' ||
+    normalized === 'cockroach' ||
+    normalized === 'cockroachdb' ||
+    normalized === 'aurora-postgres' ||
+    normalized === 'aurora_postgresql' ||
+    normalized === 'mysql' ||
+    normalized === 'mariadb' ||
+    normalized === 'aurora-mysql' ||
+    normalized === 'mssql' ||
+    normalized === 'sqlserver' ||
+    normalized === 'sql-server' ||
+    normalized === 'transactsql' ||
+    normalized === 'tsql'
+  );
+}
+
+/**
+ * Default connection hints per engine family (no embedded passwords).
  * @param {string} engine
  * @returns {{ port: string, user: string, password: string }}
  */
@@ -93079,7 +93120,7 @@ function resolveEngineDefaults(engine) {
   const normalized = (engine || 'postgres').toLowerCase();
 
   if (normalized === 'mysql' || normalized === 'mariadb' || normalized === 'aurora-mysql') {
-    return { port: '3306', user: 'root', password: 'root' };
+    return { port: '3306', user: 'root', password: '' };
   }
 
   if (normalized === 'sqlite' || normalized === 'sqlite3') {
@@ -93093,10 +93134,10 @@ function resolveEngineDefaults(engine) {
     normalized === 'transactsql' ||
     normalized === 'tsql'
   ) {
-    return { port: '1433', user: 'sa', password: 'Your_strong_Password123' };
+    return { port: '1433', user: 'sa', password: '' };
   }
 
-  return { port: '5432', user: 'postgres', password: 'root' };
+  return { port: '5432', user: 'postgres', password: '' };
 }
 
 module.exports = {
@@ -93106,6 +93147,7 @@ module.exports = {
   stripLeadingComments,
   isBlockedSchemaStatement,
   isStaticOnlyEngine,
+  requiresLivePassword,
   resolveParserDialect,
   resolveEngineDefaults,
 };

@@ -28,7 +28,7 @@ class MySQLAnalyzer {
         port: config.port || 3306,
         database: config.database || 'test_db',
         user: config.user || 'root',
-        password: config.password || 'root',
+        password: config.password || '',
         waitForConnections: true,
         connectionLimit: 5,
         connectTimeout: 5000,
