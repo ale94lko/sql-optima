@@ -353,7 +353,7 @@ describe('run', () => {
     expect(MssqlAnalyzer).not.toHaveBeenCalled();
   });
 
-  it('reports unsupported engines without opening a database connection', async () => {
+  it('fails unknown engines before analysis and lists allowed values', async () => {
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'oracle';
       if (name === 'sql_content') return 'SELECT 1;';
@@ -362,18 +362,36 @@ describe('run', () => {
 
     await run(deps());
 
-    expect(generateMarkdownReport).toHaveBeenCalledWith(
-      expect.objectContaining({
-        dynamicResult: expect.objectContaining({
-          executed: false,
-          reason: expect.stringContaining('oracle'),
-        }),
-      }),
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringMatching(/Unknown engine "oracle".*Allowed values:/),
     );
+    expect(analyzeStaticSQL).not.toHaveBeenCalled();
+    expect(generateMarkdownReport).not.toHaveBeenCalled();
     expect(PostgresAnalyzer).not.toHaveBeenCalled();
     expect(MySQLAnalyzer).not.toHaveBeenCalled();
     expect(SqliteAnalyzer).not.toHaveBeenCalled();
     expect(MssqlAnalyzer).not.toHaveBeenCalled();
+  });
+
+  it('fails a non-numeric db_port before connecting', async () => {
+    core.getInput.mockImplementation((name) => {
+      const values = {
+        engine: 'postgres',
+        sql_content: 'SELECT 1;',
+        db_password: 'secret',
+        db_port: 'abc',
+      };
+      return values[name] || '';
+    });
+
+    await run(deps());
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid db_port "abc"'),
+    );
+    expect(analyzeStaticSQL).not.toHaveBeenCalled();
+    expect(postgresAnalyzer.testConnection).not.toHaveBeenCalled();
+    expect(PostgresAnalyzer).not.toHaveBeenCalled();
   });
 
   it('marks the action as failed when summary writing throws', async () => {

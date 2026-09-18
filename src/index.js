@@ -23,6 +23,8 @@ async function run(overrides = {}) {
   const sqlUtils = overrides.sqlUtils || require('./sqlUtils');
   const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword } =
     sqlUtils;
+  const inputValidation = overrides.inputValidation || require('./inputValidation');
+  const { validateActionInputs } = inputValidation;
   const severityGate = overrides.severityGate || require('./severityGate');
   const { evaluateSeverityGate } = severityGate;
 
@@ -42,6 +44,15 @@ async function run(overrides = {}) {
     const payloadSql = payload
       ? payload.sql_code || payload.sql_content || ''
       : '';
+
+    engine = String(engine || 'postgres').trim().toLowerCase();
+    const dbPortInput = (core.getInput('db_port') || '').trim();
+    const inputCheck = validateActionInputs({ engine, dbPort: dbPortInput });
+    if (!inputCheck.ok) {
+      core.setFailed(inputCheck.error);
+      return;
+    }
+    engine = inputCheck.engine;
 
     // 3. Resolve SQL source: sql_file > sql_content > repository_dispatch payload
     let sqlContent = '';
@@ -66,7 +77,6 @@ async function run(overrides = {}) {
       return;
     }
 
-    engine = engine.toLowerCase();
     core.info(`Starting SQL Optima analysis for engine: ${engine}`);
 
     // 4. Execute Static AST Analysis
@@ -86,7 +96,7 @@ async function run(overrides = {}) {
 
     const dbConfig = {
       host: core.getInput('db_host') || 'localhost',
-      port: parseInt(core.getInput('db_port') || defaults.port, 10),
+      port: parseInt(dbPortInput || defaults.port, 10),
       database: core.getInput('db_name') || 'test_db',
       user: core.getInput('db_user') || defaults.user,
       password,
