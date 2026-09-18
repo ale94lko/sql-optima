@@ -320,9 +320,52 @@ Fails the job when any finding is HIGH or above. See [`fail_on_severity`](#input
 
 ## Local Development & Building
 
-Copy [`.env.example`](.env.example) for local Action/DB input placeholders (`ENGINE`, `SQL_FILE`, `DB_*`). Leave password and unused DB fields empty; do not commit a real `.env`. For a database-free sanity check, run the [local static smoke check](#d-local-static-smoke-check-no-database).
+Copy [`.env.example`](.env.example) to `.env` for local Action/DB placeholders (`ENGINE`, `SQL_FILE`, `DB_*`). Set `DB_PASSWORD` only in your private `.env` (gitignored); do not commit real credentials. For a database-free sanity check, run the [local static smoke check](#d-local-static-smoke-check-no-database).
 
-To build and compile the distribution bundle locally:
+### Optional local Postgres (dynamic analysis)
+
+[`docker-compose.yml`](docker-compose.yml) starts **Postgres 16** with the same defaults as CI (`test_db` / `postgres` / port `5432`). Credentials come from `.env` — nothing production-like is hardcoded in Compose.
+
+```bash
+cp .env.example .env
+# Set DB_PASSWORD in .env (CI / docs examples use `root` for local-only)
+
+docker compose up -d
+
+# Optional: seed shared tables (same as CI; use the password from your .env)
+PGPASSWORD=root psql -h localhost -U postgres -d test_db -f examples/seed_postgres.sql
+```
+
+Run the Action against that DB from a consumer-style workflow (same inputs as [Quick start](#quick-start)):
+
+```yaml
+- uses: ale94lko/sql-optima@v1
+  with:
+    engine: postgres
+    sql_file: examples/mixed_postgres.sql
+    db_host: localhost
+    db_port: '5432'
+    db_name: test_db
+    db_user: postgres
+    db_password: root   # or whatever you set in .env
+```
+
+Or invoke the bundled entrypoint locally after `npm run build` (GitHub Actions maps inputs to `INPUT_*`):
+
+```bash
+export INPUT_ENGINE=postgres
+export INPUT_SQL_FILE=examples/mixed_postgres.sql
+export INPUT_DB_HOST=localhost
+export INPUT_DB_PORT=5432
+export INPUT_DB_NAME=test_db
+export INPUT_DB_USER=postgres
+export INPUT_DB_PASSWORD="${DB_PASSWORD:-root}"
+node dist/index.js
+```
+
+Stop the stack with `docker compose down` when finished.
+
+### Build
 
 Requires **Node.js 24+** (`engines.node` in `package.json`; matches Action `runs.using: node24` and CI).
 

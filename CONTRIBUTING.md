@@ -26,6 +26,8 @@ npm ci
 
 This installs dependencies and is enough to run tests and rebuild `dist/`.
 
+For optional live Postgres analysis locally, copy `.env.example` → `.env`, set `DB_PASSWORD`, and run `docker compose up -d` (see [README — Local Development](README.md#local-development--building)).
+
 ## Coding standards
 
 - JavaScript style is enforced by **ESLint** (`eslint.config.js`).

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Optional `docker-compose.yml` for local Postgres 16 dynamic analysis (env from `.env.example`) ([#51](https://github.com/ale94lko/sql-optima/issues/51)).
 - Example fixture `examples/leading_wildcard_like.sql` and `.env.example` from community PRs ([#54](https://github.com/ale94lko/sql-optima/pull/54), [#56](https://github.com/ale94lko/sql-optima/pull/56)).
 - `.github/CODEOWNERS` for two-person review.
 - README Usage Examples snippet for `fail_on_severity: high`, linked to Inputs ([#41](https://github.com/ale94lko/sql-optima/issues/41)).
