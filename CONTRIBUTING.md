@@ -67,7 +67,7 @@ PR and `main` pushes run [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 | :--- | :--- |
 | `unit` | Vitest + coverage (no database services) |
 | `build` | `ncc` bundle + assert committed `dist/` is current |
-| `lint` | ESLint (`npm run lint`) + [actionlint](https://github.com/rhysd/actionlint) for workflows |
+| `lint` | ESLint (`npm run lint`) + `npm audit --audit-level=high` + [actionlint](https://github.com/rhysd/actionlint) for workflows |
 | `integration-*` | Live Action runs against Postgres, MySQL, MariaDB, SQLite, SQL Server, and static BigQuery/Snowflake samples |
 
 Security / supply-chain (separate workflows):
@@ -78,6 +78,8 @@ Security / supply-chain (separate workflows):
 Tag releases stay on [`.github/workflows/release.yml`](.github/workflows/release.yml) (`contents: write` only on that job). Pushing `vX.Y.Z` creates the GitHub Release and moves the major floating tag (`vX`) for Marketplace consumers (`uses: ale94lko/sql-optima@v1`). Manual / API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml) (`repository_dispatch` / `workflow_dispatch` only).
 
 Workflows use least-privilege `permissions:` and SHA-pinned Actions with `# vX.Y.Z` comments.
+
+The lint job’s `npm audit --audit-level=high` fails the PR on high/critical advisories. Prefer upgrading the dependency (or a Dependabot PR) over `npm audit --ignore`; only document a temporary exception in this file if a transitive finding cannot be fixed yet.
 
 ## Pull requests
 

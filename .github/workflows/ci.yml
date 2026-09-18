@@ -85,6 +85,9 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      - name: npm audit
+        run: npm audit --audit-level=high
+
       - name: actionlint
         shell: bash
         env:
