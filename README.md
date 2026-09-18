@@ -69,8 +69,8 @@ Prefer SHA-pinning in high-assurance workflows; use `@v1` for Marketplace-style 
 | `db_name` | Test database name (ignored for `sqlite` / static-only) | `false` | `test_db` |
 | `db_user` | Database user (ignored for `sqlite` / static-only) | `false` | engine default |
 | `db_password` | Database user password (ignored for `sqlite` / static-only) | `false` | engine default |
-| `fail_on_severity` | Fail the job if any finding ≥ this severity (`none`, `info`, `low`, `medium`, `high`, `critical`) | `false` | `none` |
-| `fail_on_types` | Comma-separated issue types that always fail (e.g. `MISSING_PRIMARY_KEY,WILDCARD_SELECT`) | `false` | `""` |
+| <a id="input-fail-on-severity"></a>`fail_on_severity` | Fail the job if any finding ≥ this severity (`none`, `info`, `low`, `medium`, `high`, `critical`) | `false` | `none` |
+| <a id="input-fail-on-types"></a>`fail_on_types` | Comma-separated issue types that always fail (e.g. `MISSING_PRIMARY_KEY,WILDCARD_SELECT`) | `false` | `""` |
 
 SQL source resolution order: `sql_file` → `sql_content` → `repository_dispatch` `client_payload.sql_code` / `sql_content`.
 
@@ -284,9 +284,9 @@ jobs:
           db_password: 'root'
 ```
 
-### 3. CI gate: warn-only vs fail on HIGH
+### 3. Fail the job on HIGH findings
 
-See the full sample at [`examples/workflows/severity-gate.yml`](examples/workflows/severity-gate.yml).
+Fails the job when any finding is HIGH or above. See [`fail_on_severity`](#input-fail-on-severity) and [`fail_on_types`](#input-fail-on-types) in [Inputs](#inputs). Full sample: [`examples/workflows/severity-gate.yml`](examples/workflows/severity-gate.yml).
 
 ```yaml
 # Warn-only (default): always green; inspect Step Summary / outputs
