@@ -377,10 +377,10 @@ cd sql-optima
 # Install dependencies
 npm install
 
-# Lint, unit tests, and coverage thresholds
+# Lint, unit tests, and coverage thresholds (statements/lines/functions ≥90%, branches ≥80%)
 npm run lint
 npm test
-npm run test:coverage
+npm run test:coverage   # fails the process (and CI `unit`) if floors in vitest.config.js are unmet
 
 # Compile source files into dist/index.js (commit dist/ JS when src/ or deps change).
 # dist/sql-wasm.wasm is generated here and gitignored on main; release tags ship it.

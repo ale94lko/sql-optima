@@ -5,6 +5,8 @@
 
 const { defineConfig } = require('vitest/config');
 
+// Coverage floors (OpenSSF Gold-aligned): unmet globals make `vitest run --coverage`
+// exit non-zero — same gate as the CI `unit` job (`npm run test:coverage`).
 module.exports = defineConfig({
   test: {
     environment: 'node',
@@ -13,7 +15,7 @@ module.exports = defineConfig({
       provider: 'v8',
       include: ['src/**/*.js'],
       exclude: ['src/**/*.test.js'],
-      reporter: ['text', 'lcov'],
+      reporter: ['text', 'lcov', 'json-summary'],
       thresholds: {
         lines: 90,
         functions: 90,

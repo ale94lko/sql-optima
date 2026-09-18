@@ -45,8 +45,20 @@ See [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md) for how reviews are conducted, wh
 As major new functionality is added, **automated tests MUST be added** to the
 Vitest suite (`npm test` / `npm run test:coverage`). Pull requests that change
 behavior without tests should explain why coverage is deferred and will usually
-be asked to add tests before merge. Targets (enforced in `vitest.config.js`): **≥90% statement** and **≥80% branch**
-coverage on `src/` (measured with `@vitest/coverage-v8`).
+be asked to add tests before merge.
+
+### Coverage thresholds (enforced)
+
+`vitest.config.js` sets global floors on `src/` via `@vitest/coverage-v8` (OpenSSF Gold-aligned). If any metric is unmet, `npm run test:coverage` exits **non-zero** — the CI **`unit`** job runs that same command and fails the workflow.
+
+| Metric | Minimum |
+| :--- | ---: |
+| statements | 90% |
+| lines | 90% |
+| functions | 90% |
+| branches | 80% |
+
+Do not lower these numbers to greenwash a PR; raise coverage (or the floor only when the suite sustains it). CI also prints the JSON summary and uploads `coverage/lcov.info` + `coverage/coverage-summary.json` as the `coverage-unit` artifact.
 
 ## Quality checks
 
@@ -67,7 +79,7 @@ PR and `main` pushes run [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 
 | Job | Purpose |
 | :--- | :--- |
-| `unit` | Vitest + coverage (no database services) |
+| `unit` | `npm run test:coverage` — Vitest + coverage floors (see [Coverage thresholds](#coverage-thresholds-enforced)); no database services |
 | `build` | `ncc` bundle + assert committed `dist/` is current |
 | `lint` | ESLint (`npm run lint`) + `npm audit --audit-level=high` + [actionlint](https://github.com/rhysd/actionlint) for workflows |
 | `integration-*` | Live Action runs against Postgres, MySQL, MariaDB, SQLite, SQL Server, and static BigQuery/Snowflake samples |
