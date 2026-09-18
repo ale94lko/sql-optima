@@ -21,6 +21,7 @@ class MySQLAnalyzer {
    * @param {Object} [dependencies.pool] - Injected mysql2 pool.
    */
   constructor(config, dependencies = {}) {
+    this.logger = dependencies.logger || null;
     this.pool =
       dependencies.pool ||
       mysql.createPool({
@@ -37,12 +38,24 @@ class MySQLAnalyzer {
   }
 
   /**
+   * @param {'debug'|'info'|'warn'|'error'} level
+   * @param {string} message
+   * @param {Record<string, unknown>} [fields]
+   */
+  log(level, message, fields) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](message, fields);
+    }
+  }
+
+  /**
    * Tests the connection to the MySQL database.
    * @returns {Promise<boolean>} True if connected successfully.
    */
   async testConnection() {
     let connection;
     try {
+      this.log('debug', 'MySQL pool connect', { engine: 'mysql', phase: 'connect' });
       connection = await this.pool.getConnection();
       await connection.query('SELECT 1;');
       return true;
@@ -64,7 +77,15 @@ class MySQLAnalyzer {
     const issues = [];
     let planData = null;
 
+    const schemaStatements = extractSchemaStatements(sqlQuery);
     const selectQuery = extractSelectStatement(sqlQuery);
+    this.log('info', 'MySQL dynamic analysis', {
+      engine: 'mysql',
+      phase: 'dynamic',
+      schemaStatementCount: schemaStatements.length,
+      hasSelect: Boolean(selectQuery),
+    });
+
     if (!selectQuery) {
       return {
         executed: false,
@@ -76,7 +97,7 @@ class MySQLAnalyzer {
     try {
       connection = await this.pool.getConnection();
 
-      for (const statement of extractSchemaStatements(sqlQuery)) {
+      for (const statement of schemaStatements) {
         try {
           await connection.query(stripLeadingComments(statement));
         } catch (schemaError) {

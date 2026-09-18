@@ -78,6 +78,8 @@ describe('run', () => {
       setOutput: vi.fn(),
       info: vi.fn(),
       warning: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
       summary: {
         addRaw: vi.fn().mockReturnValue({
           write: vi.fn().mockResolvedValue(undefined),
@@ -267,7 +269,12 @@ describe('run', () => {
 
     await run(deps());
 
-    expect(core.warning).toHaveBeenCalledWith('Skipping dynamic analysis: db down');
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('"msg":"Skipping dynamic analysis"'),
+    );
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('"error":"db down"'),
+    );
     expect(generateMarkdownReport).toHaveBeenCalledWith(
       expect.objectContaining({
         dynamicResult: expect.objectContaining({
@@ -322,6 +329,12 @@ describe('run', () => {
         port: 1433,
         user: 'sa',
         password: 'secret',
+      }),
+      expect.objectContaining({
+        logger: expect.objectContaining({
+          info: expect.any(Function),
+          warn: expect.any(Function),
+        }),
       }),
     );
     expect(mssqlAnalyzer.testConnection).toHaveBeenCalled();

@@ -91647,6 +91647,7 @@ class MssqlAnalyzer {
    * @param {Object} [dependencies.sql] - Injected mssql module (for connect).
    */
   constructor(config, dependencies = {}) {
+    this.logger = dependencies.logger || null;
     this.config = {
       server: config.host || 'localhost',
       port: config.port || 1433,
@@ -91672,11 +91673,26 @@ class MssqlAnalyzer {
   }
 
   /**
+   * @param {'debug'|'info'|'warn'|'error'} level
+   * @param {string} message
+   * @param {Record<string, unknown>} [fields]
+   */
+  log(level, message, fields) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](message, fields);
+    }
+  }
+
+  /**
    * Ensures a connection pool is available and healthy.
    * @returns {Promise<boolean>}
    */
   async testConnection() {
     try {
+      this.log('debug', 'SQL Server pool connect', {
+        engine: 'mssql',
+        phase: 'connect',
+      });
       if (!this.pool) {
         this.pool = await this.sql.connect(this.config);
       }
@@ -91695,7 +91711,15 @@ class MssqlAnalyzer {
   async analyzeQuery(sqlQuery) {
     const issues = [];
 
+    const schemaStatements = extractSchemaStatements(sqlQuery);
     const selectQuery = extractSelectStatement(sqlQuery);
+    this.log('info', 'SQL Server dynamic analysis', {
+      engine: 'mssql',
+      phase: 'dynamic',
+      schemaStatementCount: schemaStatements.length,
+      hasSelect: Boolean(selectQuery),
+    });
+
     if (!selectQuery) {
       return {
         executed: false,
@@ -91709,7 +91733,7 @@ class MssqlAnalyzer {
         await this.testConnection();
       }
 
-      for (const statement of extractSchemaStatements(sqlQuery)) {
+      for (const statement of schemaStatements) {
         try {
           await this.pool.request().query(stripLeadingComments(statement));
         } catch (schemaError) {
@@ -91853,6 +91877,7 @@ class MySQLAnalyzer {
    * @param {Object} [dependencies.pool] - Injected mysql2 pool.
    */
   constructor(config, dependencies = {}) {
+    this.logger = dependencies.logger || null;
     this.pool =
       dependencies.pool ||
       mysql.createPool({
@@ -91869,12 +91894,24 @@ class MySQLAnalyzer {
   }
 
   /**
+   * @param {'debug'|'info'|'warn'|'error'} level
+   * @param {string} message
+   * @param {Record<string, unknown>} [fields]
+   */
+  log(level, message, fields) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](message, fields);
+    }
+  }
+
+  /**
    * Tests the connection to the MySQL database.
    * @returns {Promise<boolean>} True if connected successfully.
    */
   async testConnection() {
     let connection;
     try {
+      this.log('debug', 'MySQL pool connect', { engine: 'mysql', phase: 'connect' });
       connection = await this.pool.getConnection();
       await connection.query('SELECT 1;');
       return true;
@@ -91896,7 +91933,15 @@ class MySQLAnalyzer {
     const issues = [];
     let planData = null;
 
+    const schemaStatements = extractSchemaStatements(sqlQuery);
     const selectQuery = extractSelectStatement(sqlQuery);
+    this.log('info', 'MySQL dynamic analysis', {
+      engine: 'mysql',
+      phase: 'dynamic',
+      schemaStatementCount: schemaStatements.length,
+      hasSelect: Boolean(selectQuery),
+    });
+
     if (!selectQuery) {
       return {
         executed: false,
@@ -91908,7 +91953,7 @@ class MySQLAnalyzer {
     try {
       connection = await this.pool.getConnection();
 
-      for (const statement of extractSchemaStatements(sqlQuery)) {
+      for (const statement of schemaStatements) {
         try {
           await connection.query(stripLeadingComments(statement));
         } catch (schemaError) {
@@ -92067,6 +92112,7 @@ class PostgresAnalyzer {
    * @param {import('pg').Pool} [dependencies.pool] - Injected pool instance.
    */
   constructor(config, dependencies = {}) {
+    this.logger = dependencies.logger || null;
     this.pool =
       dependencies.pool ||
       new Pool({
@@ -92082,12 +92128,27 @@ class PostgresAnalyzer {
   }
 
   /**
+   * @param {'debug'|'info'|'warn'|'error'} level
+   * @param {string} message
+   * @param {Record<string, unknown>} [fields]
+   */
+  log(level, message, fields) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](message, fields);
+    }
+  }
+
+  /**
    * Tests the connection to the PostgreSQL database.
    * @returns {Promise<boolean>} True if connected successfully.
    */
   async testConnection() {
     let client;
     try {
+      this.log('debug', 'PostgreSQL pool connect', {
+        engine: 'postgres',
+        phase: 'connect',
+      });
       client = await this.pool.connect();
       await client.query('SELECT 1;');
       return true;
@@ -92109,7 +92170,15 @@ class PostgresAnalyzer {
     const issues = [];
     let planData = null;
 
+    const schemaStatements = extractSchemaStatements(sqlQuery);
     const selectQuery = extractSelectStatement(sqlQuery);
+    this.log('info', 'PostgreSQL dynamic analysis', {
+      engine: 'postgres',
+      phase: 'dynamic',
+      schemaStatementCount: schemaStatements.length,
+      hasSelect: Boolean(selectQuery),
+    });
+
     if (!selectQuery) {
       return {
         executed: false,
@@ -92121,7 +92190,7 @@ class PostgresAnalyzer {
     try {
       client = await this.pool.connect();
 
-      for (const statement of extractSchemaStatements(sqlQuery)) {
+      for (const statement of schemaStatements) {
         try {
           await client.query(stripLeadingComments(statement));
         } catch (schemaError) {
@@ -92261,9 +92330,21 @@ class SqliteAnalyzer {
    */
   constructor(config = {}, dependencies = {}) {
     this.config = config;
+    this.logger = dependencies.logger || null;
     this.initSqlJs = dependencies.initSqlJs || initSqlJs;
     this.db = null;
     this.SQL = null;
+  }
+
+  /**
+   * @param {'debug'|'info'|'warn'|'error'} level
+   * @param {string} message
+   * @param {Record<string, unknown>} [fields]
+   */
+  log(level, message, fields) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](message, fields);
+    }
   }
 
   /**
@@ -92271,6 +92352,10 @@ class SqliteAnalyzer {
    * @returns {Promise<boolean>}
    */
   async testConnection() {
+    this.log('debug', 'SQLite in-memory connect', {
+      engine: 'sqlite',
+      phase: 'connect',
+    });
     const options = {};
     const wasmPath = path.join(__dirname, 'sql-wasm.wasm');
     if (fs.existsSync(wasmPath)) {
@@ -92296,6 +92381,14 @@ class SqliteAnalyzer {
     }
 
     const schemaStatements = extractSchemaStatements(sqlQuery);
+    const selectQuery = extractSelectStatement(sqlQuery);
+    this.log('info', 'SQLite dynamic analysis', {
+      engine: 'sqlite',
+      phase: 'dynamic',
+      schemaStatementCount: schemaStatements.length,
+      hasSelect: Boolean(selectQuery),
+    });
+
     for (const statement of schemaStatements) {
       try {
         this.db.run(stripLeadingComments(statement));
@@ -92310,7 +92403,6 @@ class SqliteAnalyzer {
       }
     }
 
-    const selectQuery = extractSelectStatement(sqlQuery);
     if (!selectQuery) {
       return {
         executed: false,
@@ -92579,12 +92671,14 @@ async function run(overrides = {}) {
   const { generateMarkdownReport } =
     overrides.formatter || __nccwpck_require__(59315);
   const sqlUtils = overrides.sqlUtils || __nccwpck_require__(25824);
-  const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword } =
+  const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword, splitStatements } =
     sqlUtils;
   const inputValidation = overrides.inputValidation || __nccwpck_require__(16342);
   const { validateActionInputs } = inputValidation;
   const severityGate = overrides.severityGate || __nccwpck_require__(59781);
   const { evaluateSeverityGate } = severityGate;
+  const { createLogger } = overrides.loggerModule || __nccwpck_require__(78033);
+  const log = overrides.logger || createLogger({ core });
 
   let dbAnalyzer = null;
 
@@ -92621,7 +92715,12 @@ async function run(overrides = {}) {
         return;
       }
       sqlContent = fs.readFileSync(resolvedPath, 'utf8');
-      core.info(`Loaded SQL from file: ${sqlFile}`);
+      log.info('Loaded SQL from file', {
+        engine,
+        phase: 'load',
+        sqlFile,
+        statementCount: splitStatements(sqlContent).length,
+      });
     } else if (sqlContentInput.trim() !== '') {
       sqlContent = sqlContentInput;
     } else if (String(payloadSql).trim() !== '') {
@@ -92635,12 +92734,22 @@ async function run(overrides = {}) {
       return;
     }
 
-    core.info(`Starting SQL Optima analysis for engine: ${engine}`);
+    const statementCount = splitStatements(sqlContent).length;
+    log.info('Starting SQL Optima analysis', {
+      engine,
+      phase: 'start',
+      statementCount,
+    });
 
     // 4. Execute Static AST Analysis
-    core.info('Running static AST analysis...');
+    log.info('Running static AST analysis', { engine, phase: 'static', statementCount });
     const staticIssues = analyzeStaticSQL(sqlContent, engine);
-    core.info(`Static analysis complete. Found ${staticIssues.length} potential issue(s).`);
+    log.info('Static analysis complete', {
+      engine,
+      phase: 'static',
+      issueCount: staticIssues.length,
+      statementCount,
+    });
 
     // 5. Configure Database connection options (no embedded password defaults)
     const defaults = resolveEngineDefaults(engine);
@@ -92660,6 +92769,8 @@ async function run(overrides = {}) {
       password,
     };
 
+    const loggerDeps = { logger: log };
+
     // 6. Select and initialize the DB analyzer engine
     if (
       engine === 'postgres' ||
@@ -92669,11 +92780,11 @@ async function run(overrides = {}) {
       engine === 'aurora-postgres' ||
       engine === 'aurora_postgresql'
     ) {
-      dbAnalyzer = new PostgresAnalyzer(dbConfig);
+      dbAnalyzer = new PostgresAnalyzer(dbConfig, loggerDeps);
     } else if (engine === 'mysql' || engine === 'mariadb' || engine === 'aurora-mysql') {
-      dbAnalyzer = new MySQLAnalyzer(dbConfig);
+      dbAnalyzer = new MySQLAnalyzer(dbConfig, loggerDeps);
     } else if (engine === 'sqlite' || engine === 'sqlite3') {
-      dbAnalyzer = new SqliteAnalyzer(dbConfig);
+      dbAnalyzer = new SqliteAnalyzer(dbConfig, loggerDeps);
     } else if (
       engine === 'mssql' ||
       engine === 'sqlserver' ||
@@ -92681,7 +92792,7 @@ async function run(overrides = {}) {
       engine === 'transactsql' ||
       engine === 'tsql'
     ) {
-      dbAnalyzer = new MssqlAnalyzer(dbConfig);
+      dbAnalyzer = new MssqlAnalyzer(dbConfig, loggerDeps);
     }
 
     // 7. Execute Dynamic Analysis if a supported engine analyzer is available
@@ -92689,13 +92800,34 @@ async function run(overrides = {}) {
 
     if (dbAnalyzer) {
       try {
-        core.info(`Connecting to ${engine.toUpperCase()} database service...`);
+        log.info('Connecting to database service', {
+          engine,
+          phase: 'connect',
+          host: dbConfig.host,
+          port: dbConfig.port,
+          database: dbConfig.database,
+          user: dbConfig.user,
+        });
         await dbAnalyzer.testConnection();
-        core.info('Connection established. Executing EXPLAIN / SHOWPLAN...');
+        log.info('Connection established; running EXPLAIN / SHOWPLAN', {
+          engine,
+          phase: 'dynamic',
+          statementCount,
+        });
 
         dynamicResult = await dbAnalyzer.analyzeQuery(sqlContent);
+        log.info('Dynamic analysis finished', {
+          engine,
+          phase: 'dynamic',
+          executed: Boolean(dynamicResult.executed),
+          issueCount: (dynamicResult.issues || []).length,
+        });
       } catch (dbError) {
-        core.warning(`Skipping dynamic analysis: ${dbError.message}`);
+        log.warn('Skipping dynamic analysis', {
+          engine,
+          phase: 'dynamic',
+          error: dbError.message,
+        });
         dynamicResult = {
           executed: false,
           error: dbError.message,
@@ -92708,17 +92840,18 @@ async function run(overrides = {}) {
         reason: `Engine "${engine}" supports static dialect linting only (no live EXPLAIN adapter yet).`,
         issues: [],
       };
-      core.info(dynamicResult.reason);
+      log.info(dynamicResult.reason, { engine, phase: 'dynamic', executed: false });
     } else {
       dynamicResult = {
         executed: false,
         reason: `Dynamic analysis for engine "${engine}" is not currently supported.`,
         issues: [],
       };
+      log.info(dynamicResult.reason, { engine, phase: 'dynamic', executed: false });
     }
 
     // 8. Generate Markdown Report
-    core.info('Generating markdown summary report...');
+    log.info('Generating markdown summary report', { engine, phase: 'report' });
     const markdownReport = generateMarkdownReport({
       engine,
       sqlContent,
@@ -92740,6 +92873,14 @@ async function run(overrides = {}) {
       failOnTypes: core.getInput('fail_on_types') || '',
     });
 
+    log.info('Severity gate evaluated', {
+      engine,
+      phase: 'gate',
+      issueCount: gate.issueCount,
+      highestSeverity: gate.highestSeverity,
+      shouldFail: gate.shouldFail,
+    });
+
     core.setOutput('issue_count', String(gate.issueCount));
     core.setOutput('highest_severity', gate.highestSeverity);
 
@@ -92748,8 +92889,17 @@ async function run(overrides = {}) {
       return;
     }
 
-    core.info('SQL Optima analysis successfully completed and posted to Step Summary.');
+    log.info('SQL Optima analysis completed', {
+      engine,
+      phase: 'done',
+      issueCount: gate.issueCount,
+      highestSeverity: gate.highestSeverity,
+    });
   } catch (error) {
+    log.error('SQL Optima Action failed', {
+      phase: 'error',
+      error: error.message,
+    });
     core.setFailed(`SQL Optima Action failed: ${error.message}`);
   } finally {
     // Gracefully release Database connection pool
@@ -92764,7 +92914,6 @@ module.exports = { run };
 if (require.main === require.cache[eval('__filename')]) {
   run();
 }
-
 
 
 /***/ }),
@@ -92883,6 +93032,130 @@ module.exports = {
   validateEngine,
   validateDbPort,
   validateActionInputs,
+};
+
+
+/***/ }),
+
+/***/ 78033:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
+ * Thin structured logger for GitHub Actions + unit tests.
+ * Wraps `@actions/core` leveled APIs and emits one JSON object per line.
+ * Never logs credential-like field values (redacted).
+ */
+
+const SENSITIVE_KEY =
+  /^(password|passwd|pwd|secret|token|authorization|api[_-]?key|db_password|connection[_-]?string)$/i;
+
+const CONNECTION_STRING_HINT =
+  /(password\s*=|pwd\s*=|:\/\/[^/@]+:[^/@]+@)/i;
+
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function looksSensitiveString(value) {
+  return typeof value === 'string' && CONNECTION_STRING_HINT.test(value);
+}
+
+/**
+ * Redact credential-like keys and connection strings from a fields object.
+ * @param {Record<string, unknown>|undefined|null} fields
+ * @returns {Record<string, unknown>}
+ */
+function redactFields(fields) {
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
+    return {};
+  }
+
+  const out = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (SENSITIVE_KEY.test(key) || looksSensitiveString(value)) {
+      out[key] = '[REDACTED]';
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      out[key] = redactFields(/** @type {Record<string, unknown>} */ (value));
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * @param {'debug'|'info'|'warn'|'error'} level
+ * @param {string} message
+ * @param {Record<string, unknown>|undefined} fields
+ * @returns {string}
+ */
+function formatLogLine(level, message, fields) {
+  return JSON.stringify({
+    level,
+    msg: String(message ?? ''),
+    ...redactFields(fields),
+  });
+}
+
+/**
+ * Create a leveled logger.
+ *
+ * @param {Object} [options]
+ * @param {Pick<import('@actions/core'), 'debug'|'info'|'warning'|'error'>} [options.core]
+ * @param {(record: {level: string, msg: string, fields: Record<string, unknown>, line: string}) => void} [options.sink]
+ *   Optional test sink that receives the structured record (already redacted).
+ */
+function createLogger(options = {}) {
+  const core = options.core || __nccwpck_require__(37484);
+  const sink = options.sink;
+
+  /**
+   * @param {'debug'|'info'|'warn'|'error'} level
+   * @param {string} message
+   * @param {Record<string, unknown>} [fields]
+   */
+  function emit(level, message, fields = {}) {
+    const safeFields = redactFields(fields);
+    const line = formatLogLine(level, message, safeFields);
+    if (typeof sink === 'function') {
+      sink({ level, msg: String(message ?? ''), fields: safeFields, line });
+    }
+
+    switch (level) {
+      case 'debug':
+        core.debug(line);
+        break;
+      case 'warn':
+        core.warning(line);
+        break;
+      case 'error':
+        core.error(line);
+        break;
+      case 'info':
+      default:
+        core.info(line);
+        break;
+    }
+  }
+
+  return {
+    debug: (message, fields) => emit('debug', message, fields),
+    info: (message, fields) => emit('info', message, fields),
+    warn: (message, fields) => emit('warn', message, fields),
+    error: (message, fields) => emit('error', message, fields),
+  };
+}
+
+module.exports = {
+  SENSITIVE_KEY,
+  redactFields,
+  formatLogLine,
+  createLogger,
 };
 
 

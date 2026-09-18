@@ -24,9 +24,21 @@ class SqliteAnalyzer {
    */
   constructor(config = {}, dependencies = {}) {
     this.config = config;
+    this.logger = dependencies.logger || null;
     this.initSqlJs = dependencies.initSqlJs || initSqlJs;
     this.db = null;
     this.SQL = null;
+  }
+
+  /**
+   * @param {'debug'|'info'|'warn'|'error'} level
+   * @param {string} message
+   * @param {Record<string, unknown>} [fields]
+   */
+  log(level, message, fields) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](message, fields);
+    }
   }
 
   /**
@@ -34,6 +46,10 @@ class SqliteAnalyzer {
    * @returns {Promise<boolean>}
    */
   async testConnection() {
+    this.log('debug', 'SQLite in-memory connect', {
+      engine: 'sqlite',
+      phase: 'connect',
+    });
     const options = {};
     const wasmPath = path.join(__dirname, 'sql-wasm.wasm');
     if (fs.existsSync(wasmPath)) {
@@ -59,6 +75,14 @@ class SqliteAnalyzer {
     }
 
     const schemaStatements = extractSchemaStatements(sqlQuery);
+    const selectQuery = extractSelectStatement(sqlQuery);
+    this.log('info', 'SQLite dynamic analysis', {
+      engine: 'sqlite',
+      phase: 'dynamic',
+      schemaStatementCount: schemaStatements.length,
+      hasSelect: Boolean(selectQuery),
+    });
+
     for (const statement of schemaStatements) {
       try {
         this.db.run(stripLeadingComments(statement));
@@ -73,7 +97,6 @@ class SqliteAnalyzer {
       }
     }
 
-    const selectQuery = extractSelectStatement(sqlQuery);
     if (!selectQuery) {
       return {
         executed: false,

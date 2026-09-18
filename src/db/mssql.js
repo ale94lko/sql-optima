@@ -22,6 +22,7 @@ class MssqlAnalyzer {
    * @param {Object} [dependencies.sql] - Injected mssql module (for connect).
    */
   constructor(config, dependencies = {}) {
+    this.logger = dependencies.logger || null;
     this.config = {
       server: config.host || 'localhost',
       port: config.port || 1433,
@@ -47,11 +48,26 @@ class MssqlAnalyzer {
   }
 
   /**
+   * @param {'debug'|'info'|'warn'|'error'} level
+   * @param {string} message
+   * @param {Record<string, unknown>} [fields]
+   */
+  log(level, message, fields) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](message, fields);
+    }
+  }
+
+  /**
    * Ensures a connection pool is available and healthy.
    * @returns {Promise<boolean>}
    */
   async testConnection() {
     try {
+      this.log('debug', 'SQL Server pool connect', {
+        engine: 'mssql',
+        phase: 'connect',
+      });
       if (!this.pool) {
         this.pool = await this.sql.connect(this.config);
       }
@@ -70,7 +86,15 @@ class MssqlAnalyzer {
   async analyzeQuery(sqlQuery) {
     const issues = [];
 
+    const schemaStatements = extractSchemaStatements(sqlQuery);
     const selectQuery = extractSelectStatement(sqlQuery);
+    this.log('info', 'SQL Server dynamic analysis', {
+      engine: 'mssql',
+      phase: 'dynamic',
+      schemaStatementCount: schemaStatements.length,
+      hasSelect: Boolean(selectQuery),
+    });
+
     if (!selectQuery) {
       return {
         executed: false,
@@ -84,7 +108,7 @@ class MssqlAnalyzer {
         await this.testConnection();
       }
 
-      for (const statement of extractSchemaStatements(sqlQuery)) {
+      for (const statement of schemaStatements) {
         try {
           await this.pool.request().query(stripLeadingComments(statement));
         } catch (schemaError) {

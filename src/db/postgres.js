@@ -21,6 +21,7 @@ class PostgresAnalyzer {
    * @param {import('pg').Pool} [dependencies.pool] - Injected pool instance.
    */
   constructor(config, dependencies = {}) {
+    this.logger = dependencies.logger || null;
     this.pool =
       dependencies.pool ||
       new Pool({
@@ -36,12 +37,27 @@ class PostgresAnalyzer {
   }
 
   /**
+   * @param {'debug'|'info'|'warn'|'error'} level
+   * @param {string} message
+   * @param {Record<string, unknown>} [fields]
+   */
+  log(level, message, fields) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](message, fields);
+    }
+  }
+
+  /**
    * Tests the connection to the PostgreSQL database.
    * @returns {Promise<boolean>} True if connected successfully.
    */
   async testConnection() {
     let client;
     try {
+      this.log('debug', 'PostgreSQL pool connect', {
+        engine: 'postgres',
+        phase: 'connect',
+      });
       client = await this.pool.connect();
       await client.query('SELECT 1;');
       return true;
@@ -63,7 +79,15 @@ class PostgresAnalyzer {
     const issues = [];
     let planData = null;
 
+    const schemaStatements = extractSchemaStatements(sqlQuery);
     const selectQuery = extractSelectStatement(sqlQuery);
+    this.log('info', 'PostgreSQL dynamic analysis', {
+      engine: 'postgres',
+      phase: 'dynamic',
+      schemaStatementCount: schemaStatements.length,
+      hasSelect: Boolean(selectQuery),
+    });
+
     if (!selectQuery) {
       return {
         executed: false,
@@ -75,7 +99,7 @@ class PostgresAnalyzer {
     try {
       client = await this.pool.connect();
 
-      for (const statement of extractSchemaStatements(sqlQuery)) {
+      for (const statement of schemaStatements) {
         try {
           await client.query(stripLeadingComments(statement));
         } catch (schemaError) {

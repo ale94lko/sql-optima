@@ -21,12 +21,14 @@ async function run(overrides = {}) {
   const { generateMarkdownReport } =
     overrides.formatter || require('./formatter');
   const sqlUtils = overrides.sqlUtils || require('./sqlUtils');
-  const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword } =
+  const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword, splitStatements } =
     sqlUtils;
   const inputValidation = overrides.inputValidation || require('./inputValidation');
   const { validateActionInputs } = inputValidation;
   const severityGate = overrides.severityGate || require('./severityGate');
   const { evaluateSeverityGate } = severityGate;
+  const { createLogger } = overrides.loggerModule || require('./logger');
+  const log = overrides.logger || createLogger({ core });
 
   let dbAnalyzer = null;
 
@@ -63,7 +65,12 @@ async function run(overrides = {}) {
         return;
       }
       sqlContent = fs.readFileSync(resolvedPath, 'utf8');
-      core.info(`Loaded SQL from file: ${sqlFile}`);
+      log.info('Loaded SQL from file', {
+        engine,
+        phase: 'load',
+        sqlFile,
+        statementCount: splitStatements(sqlContent).length,
+      });
     } else if (sqlContentInput.trim() !== '') {
       sqlContent = sqlContentInput;
     } else if (String(payloadSql).trim() !== '') {
@@ -77,12 +84,22 @@ async function run(overrides = {}) {
       return;
     }
 
-    core.info(`Starting SQL Optima analysis for engine: ${engine}`);
+    const statementCount = splitStatements(sqlContent).length;
+    log.info('Starting SQL Optima analysis', {
+      engine,
+      phase: 'start',
+      statementCount,
+    });
 
     // 4. Execute Static AST Analysis
-    core.info('Running static AST analysis...');
+    log.info('Running static AST analysis', { engine, phase: 'static', statementCount });
     const staticIssues = analyzeStaticSQL(sqlContent, engine);
-    core.info(`Static analysis complete. Found ${staticIssues.length} potential issue(s).`);
+    log.info('Static analysis complete', {
+      engine,
+      phase: 'static',
+      issueCount: staticIssues.length,
+      statementCount,
+    });
 
     // 5. Configure Database connection options (no embedded password defaults)
     const defaults = resolveEngineDefaults(engine);
@@ -102,6 +119,8 @@ async function run(overrides = {}) {
       password,
     };
 
+    const loggerDeps = { logger: log };
+
     // 6. Select and initialize the DB analyzer engine
     if (
       engine === 'postgres' ||
@@ -111,11 +130,11 @@ async function run(overrides = {}) {
       engine === 'aurora-postgres' ||
       engine === 'aurora_postgresql'
     ) {
-      dbAnalyzer = new PostgresAnalyzer(dbConfig);
+      dbAnalyzer = new PostgresAnalyzer(dbConfig, loggerDeps);
     } else if (engine === 'mysql' || engine === 'mariadb' || engine === 'aurora-mysql') {
-      dbAnalyzer = new MySQLAnalyzer(dbConfig);
+      dbAnalyzer = new MySQLAnalyzer(dbConfig, loggerDeps);
     } else if (engine === 'sqlite' || engine === 'sqlite3') {
-      dbAnalyzer = new SqliteAnalyzer(dbConfig);
+      dbAnalyzer = new SqliteAnalyzer(dbConfig, loggerDeps);
     } else if (
       engine === 'mssql' ||
       engine === 'sqlserver' ||
@@ -123,7 +142,7 @@ async function run(overrides = {}) {
       engine === 'transactsql' ||
       engine === 'tsql'
     ) {
-      dbAnalyzer = new MssqlAnalyzer(dbConfig);
+      dbAnalyzer = new MssqlAnalyzer(dbConfig, loggerDeps);
     }
 
     // 7. Execute Dynamic Analysis if a supported engine analyzer is available
@@ -131,13 +150,34 @@ async function run(overrides = {}) {
 
     if (dbAnalyzer) {
       try {
-        core.info(`Connecting to ${engine.toUpperCase()} database service...`);
+        log.info('Connecting to database service', {
+          engine,
+          phase: 'connect',
+          host: dbConfig.host,
+          port: dbConfig.port,
+          database: dbConfig.database,
+          user: dbConfig.user,
+        });
         await dbAnalyzer.testConnection();
-        core.info('Connection established. Executing EXPLAIN / SHOWPLAN...');
+        log.info('Connection established; running EXPLAIN / SHOWPLAN', {
+          engine,
+          phase: 'dynamic',
+          statementCount,
+        });
 
         dynamicResult = await dbAnalyzer.analyzeQuery(sqlContent);
+        log.info('Dynamic analysis finished', {
+          engine,
+          phase: 'dynamic',
+          executed: Boolean(dynamicResult.executed),
+          issueCount: (dynamicResult.issues || []).length,
+        });
       } catch (dbError) {
-        core.warning(`Skipping dynamic analysis: ${dbError.message}`);
+        log.warn('Skipping dynamic analysis', {
+          engine,
+          phase: 'dynamic',
+          error: dbError.message,
+        });
         dynamicResult = {
           executed: false,
           error: dbError.message,
@@ -150,17 +190,18 @@ async function run(overrides = {}) {
         reason: `Engine "${engine}" supports static dialect linting only (no live EXPLAIN adapter yet).`,
         issues: [],
       };
-      core.info(dynamicResult.reason);
+      log.info(dynamicResult.reason, { engine, phase: 'dynamic', executed: false });
     } else {
       dynamicResult = {
         executed: false,
         reason: `Dynamic analysis for engine "${engine}" is not currently supported.`,
         issues: [],
       };
+      log.info(dynamicResult.reason, { engine, phase: 'dynamic', executed: false });
     }
 
     // 8. Generate Markdown Report
-    core.info('Generating markdown summary report...');
+    log.info('Generating markdown summary report', { engine, phase: 'report' });
     const markdownReport = generateMarkdownReport({
       engine,
       sqlContent,
@@ -182,6 +223,14 @@ async function run(overrides = {}) {
       failOnTypes: core.getInput('fail_on_types') || '',
     });
 
+    log.info('Severity gate evaluated', {
+      engine,
+      phase: 'gate',
+      issueCount: gate.issueCount,
+      highestSeverity: gate.highestSeverity,
+      shouldFail: gate.shouldFail,
+    });
+
     core.setOutput('issue_count', String(gate.issueCount));
     core.setOutput('highest_severity', gate.highestSeverity);
 
@@ -190,8 +239,17 @@ async function run(overrides = {}) {
       return;
     }
 
-    core.info('SQL Optima analysis successfully completed and posted to Step Summary.');
+    log.info('SQL Optima analysis completed', {
+      engine,
+      phase: 'done',
+      issueCount: gate.issueCount,
+      highestSeverity: gate.highestSeverity,
+    });
   } catch (error) {
+    log.error('SQL Optima Action failed', {
+      phase: 'error',
+      error: error.message,
+    });
     core.setFailed(`SQL Optima Action failed: ${error.message}`);
   } finally {
     // Gracefully release Database connection pool
@@ -206,4 +264,3 @@ module.exports = { run };
 if (require.main === module) {
   run();
 }
-
