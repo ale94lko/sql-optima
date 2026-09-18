@@ -41,7 +41,10 @@ jobs:
           git add -f dist/sql-wasm.wasm
           if ! git diff-index --quiet HEAD; then
             git commit -m "build: update dist bundle for release ${{ github.ref_name }}"
-            git push origin HEAD:${{ github.ref }}
+            # Annotated/lightweight tags already exist on push; move the tag to
+            # include release-only artifacts (e.g. force-added sql-wasm.wasm).
+            git tag -f "${{ github.ref_name }}"
+            git push origin "refs/tags/${{ github.ref_name }}" --force
           else
             echo "No changes in dist/ to commit."
           fi
