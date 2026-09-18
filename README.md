@@ -1,8 +1,5 @@
-<p align="center">
-  <img src="assets/logo.jpg" alt="SQL Optima - Automated Performance Analyzer" width="280">
-</p>
+# <img src="assets/logo.jpg" alt="SQL Optima logo" height="48"> SQL Optima
 
-# SQL Optima
 
 [![Health Score](https://raw.githubusercontent.com/ale94lko/sql-optima/output/badge.svg)](https://github.com/ale94lko/sql-optima/community)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14693/badge)](https://www.bestpractices.dev/projects/14693)
