@@ -339,6 +339,24 @@ npm run test:coverage
 npm run build
 ```
 
+### Local PostgreSQL Dynamic Analysis (Docker)
+
+To run dynamic analysis locally against a live PostgreSQL database without configuring a database by hand:
+
+```bash
+# Optional: copy and adjust environment variables if desired (defaults match CI)
+cp .env.example .env
+
+# Start the local PostgreSQL 16 service with seed data preloaded
+docker compose up -d
+
+# Wait until healthy, then analyze with node or local tooling
+# Stop the stack when done
+docker compose down
+```
+
+The database container automatically seeds tables and records from `examples/seed_postgres.sql`.
+
 CI on pull requests runs unit tests, lint (ESLint + actionlint), a `dist/` freshness check, and multi-engine integration jobs — see [CONTRIBUTING.md](CONTRIBUTING.md#continuous-integration).
 
 ---
