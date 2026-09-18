@@ -96,6 +96,7 @@ Checked-in fixtures under [`examples/`](examples/) intentionally trigger the fin
 | :--- | :--- |
 | [`examples/bad_schema.sql`](examples/bad_schema.sql) | Missing primary keys and unindexed foreign keys (static) |
 | [`examples/bad_queries.sql`](examples/bad_queries.sql) | `SELECT *` and leading-wildcard `LIKE` (static; dynamic if tables exist) |
+| [`examples/leading_wildcard_like.sql`](examples/leading_wildcard_like.sql) | Dedicated leading-wildcard `LIKE` queries (static; dynamic if `users` exists) |
 | [`examples/mixed_postgres.sql`](examples/mixed_postgres.sql) | Combined schema + query demo for PostgreSQL |
 | [`examples/mixed_mysql.sql`](examples/mixed_mysql.sql) | Combined schema + query demo for MySQL / MariaDB |
 | [`examples/mixed_sqlite.sql`](examples/mixed_sqlite.sql) | Combined schema + query demo for SQLite (in-memory EXPLAIN) |
