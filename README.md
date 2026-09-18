@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.jpg" alt="SQL Optima - Automated Performance Analyzer" width="280">
+</p>
+
 # SQL Optima
 
 [![Health Score](https://raw.githubusercontent.com/ale94lko/sql-optima/output/badge.svg)](https://github.com/ale94lko/sql-optima/community)
@@ -5,6 +9,10 @@
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-SQL%20Optima%20Action-blue?style=flat-square&logo=github)](https://github.com/marketplace/actions/sql-optima-action)
 [![CI](https://github.com/ale94lko/sql-optima/actions/workflows/ci.yml/badge.svg)](https://github.com/ale94lko/sql-optima/actions/workflows/ci.yml)
 [![Node.js CI](https://img.shields.io/badge/node.js-24.x-green?style=flat-square&logo=node.js)](https://nodejs.org/)
+
+<p align="center">
+  <img src="assets/banner.jpg" alt="SQL Optima - Automated SQL Performance and Anti-Pattern Analyzer for CI/CD">
+</p>
 
 An automated **SQL performance analyzer, schema linter, and query execution optimizer** built for GitHub Actions.
 
