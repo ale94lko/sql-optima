@@ -4,7 +4,10 @@
 
 - Every change to `main` MUST go through a pull request (branch protection).
 - CI (`unit`, `build`, `lint`, and relevant integration jobs) MUST be green before merge.
-- For OpenSSF Best Practices **Gold**, at least **50% of proposed modifications** SHOULD be reviewed by a person **other than the author** before release. Recruiting a second maintainer/reviewer is required to meet that bar continuously (see [GOVERNANCE.md](../GOVERNANCE.md)).
+- At least **50% of proposed modifications** MUST be reviewed before release by a person **other than the author** (OpenSSF Best Practices Gold `two_person_review`). In practice:
+  - Community and Dependabot PRs are reviewed by a maintainer other than the author before merge.
+  - Maintainer PRs request review from the other maintainer listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS) when they are available.
+- Evidence: non-author approval on contributor PRs such as [#56](https://github.com/ale94lko/sql-optima/pull/56) (author [@dyk1454683243-sudo](https://github.com/dyk1454683243-sudo), review by [@ale94lko](https://github.com/ale94lko)).
 
 ## What reviewers check
 
@@ -16,7 +19,7 @@
 
 ## Acceptable to merge
 
-- Approval (when a second reviewer is available) **or**, while bus factor is 1, maintainer self-merge only after the checklist above is satisfied and CI is green.
+- Approval from a reviewer other than the author (CODEOWNERS), **or** for Dependabot/automation PRs, maintainer review of the bot-authored diff.
 - Squash-merge preferred; link related issues.
 
 ## Small tasks for new contributors

@@ -5,8 +5,7 @@ What sql-optima intends to do (and not do) over the next year.
 ## Next 12 months
 
 - Keep CI, CodeQL, Scorecard, and Dependabot green on `main`.
-- Raise the maintainer bus factor to **2+** and land two unassociated significant contributors (required for OpenSSF Best Practices **Gold**).
-- Enable consistent two-person review on non-trivial PRs once a second maintainer exists.
+- Keep the maintainer bus factor at **2+** ([@ale94lko](https://github.com/ale94lko) and [@dyk1454683243-sudo](https://github.com/dyk1454683243-sudo)) and continue two-person review on community, Dependabot, and maintainer PRs.
 - Expand dialect fixtures and regression tests as engines evolve.
 - Keep Marketplace `@v1` floating tag current with semver releases.
 

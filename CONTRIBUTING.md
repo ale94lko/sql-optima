@@ -36,14 +36,14 @@ This installs dependencies and is enough to run tests and rebuild `dist/`.
 
 ## Code review
 
-See [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md) for how reviews are conducted, what must be checked, and how small tasks are labeled for new contributors.
+See [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md) for how reviews are conducted, what must be checked, and how small tasks are labeled for new contributors. Default reviewers are listed in [`.github/CODEOWNERS`](.github/CODEOWNERS). Prefer requesting a review from a maintainer **other than the author** before merge.
 
 ## Testing policy (required)
 
 As major new functionality is added, **automated tests MUST be added** to the
 Vitest suite (`npm test` / `npm run test:coverage`). Pull requests that change
 behavior without tests should explain why coverage is deferred and will usually
-be asked to add tests before merge. Targets: **≥90% statement** and **≥80% branch**
+be asked to add tests before merge. Targets (enforced in `vitest.config.js`): **≥90% statement** and **≥80% branch**
 coverage on `src/` (measured with `@vitest/coverage-v8`).
 
 ## Quality checks

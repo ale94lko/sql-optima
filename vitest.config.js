@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 sql-optima contributors
+ * SPDX-License-Identifier: MIT
+ */
+
 const { defineConfig } = require('vitest/config');
 
 module.exports = defineConfig({
@@ -10,10 +15,10 @@ module.exports = defineConfig({
       exclude: ['src/**/*.test.js'],
       reporter: ['text', 'lcov'],
       thresholds: {
-        lines: 85,
-        functions: 85,
-        branches: 75,
-        statements: 85,
+        lines: 90,
+        functions: 90,
+        branches: 80,
+        statements: 90,
       },
     },
   },

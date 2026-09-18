@@ -1,3 +1,5 @@
+# Copyright (c) 2026 sql-optima contributors
+# SPDX-License-Identifier: MIT
 name: 'SQL Optima Action'
 description: 'Automated SQL parser, schema linter, and dynamic query execution analyzer'
 author: 'ale94lko'

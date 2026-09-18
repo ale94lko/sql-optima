@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Example fixture `examples/leading_wildcard_like.sql` and `.env.example` from community PRs ([#54](https://github.com/ale94lko/sql-optima/pull/54), [#56](https://github.com/ale94lko/sql-optima/pull/56)).
+- `.github/CODEOWNERS` for two-person review.
+
+### Changed
+
+- Vitest coverage gates raised to statements/lines/functions ≥90% and branches ≥80% (OpenSSF Gold).
+- Governance lists a second maintainer and documents non-author review.
+
 ## [1.0.0] - 2026-09-18
 
 ### Added
