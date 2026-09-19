@@ -43,6 +43,10 @@ inputs:
     description: 'Comma-separated issue types that always fail the job (e.g. MISSING_PRIMARY_KEY,WILDCARD_SELECT)'
     required: false
     default: ''
+  job_summary:
+    description: 'How much to write to $GITHUB_STEP_SUMMARY (full | compact | none). File report and outputs are always produced.'
+    required: false
+    default: 'full'
 
 outputs:
   report:

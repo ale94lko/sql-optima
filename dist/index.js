@@ -92655,6 +92655,53 @@ function truncateEmbed(text, maxChars, kind) {
 }
 
 /**
+ * Normalize `job_summary` Action input.
+ * @param {string} [value='full']
+ * @returns {'full'|'compact'|'none'}
+ */
+function normalizeJobSummaryMode(value = 'full') {
+  const key = String(value || 'full').trim().toLowerCase();
+  if (key === 'full' || key === 'compact' || key === 'none') {
+    return key;
+  }
+  throw new Error(
+    `Invalid job_summary "${value}". Use full, compact, or none.`,
+  );
+}
+
+/**
+ * Short Job Summary for consumers that append their own narrative.
+ *
+ * @param {Object} options
+ * @param {string} options.engine
+ * @param {number} options.issueCount
+ * @param {string} options.highestSeverity
+ * @param {string} [options.reportPath='sql-optima-report.md']
+ * @returns {string}
+ */
+function generateCompactJobSummary({
+  engine,
+  issueCount,
+  highestSeverity,
+  reportPath = 'sql-optima-report.md',
+}) {
+  const engineLabel = String(engine || 'unknown').toUpperCase();
+  const count = Number.isFinite(issueCount) ? issueCount : 0;
+  const severity = String(highestSeverity || 'NONE').toUpperCase();
+  const pathLabel = String(reportPath || 'sql-optima-report.md');
+
+  return (
+    `## SQL Optima\n\n` +
+    `| Metric | Value |\n` +
+    `| :--- | :--- |\n` +
+    `| **Engine** | \`${engineLabel}\` |\n` +
+    `| **Issues** | \`${count}\` |\n` +
+    `| **Highest severity** | \`${severity}\` |\n\n` +
+    `Full report: \`${pathLabel}\` (upload as a workflow artifact to download).\n`
+  );
+}
+
+/**
  * Generates a GitHub Step Summary Markdown string.
  *
  * @param {Object} options
@@ -92820,6 +92867,8 @@ function generateMarkdownReport({
 
 module.exports = {
   generateMarkdownReport,
+  generateCompactJobSummary,
+  normalizeJobSummaryMode,
   escapeMarkdownTableCell,
   DEFAULT_SUMMARY_EMBED_LIMITS,
   STEP_SUMMARY_SOFT_LIMIT,
@@ -92852,8 +92901,15 @@ async function run(overrides = {}) {
   const MySQLAnalyzer = overrides.MySQLAnalyzer || __nccwpck_require__(90678);
   const SqliteAnalyzer = overrides.SqliteAnalyzer || __nccwpck_require__(83006);
   const MssqlAnalyzer = overrides.MssqlAnalyzer || __nccwpck_require__(73800);
-  const { generateMarkdownReport } =
-    overrides.formatter || __nccwpck_require__(59315);
+  const formatter = {
+    ...__nccwpck_require__(59315),
+    ...(overrides.formatter || {}),
+  };
+  const {
+    generateMarkdownReport,
+    generateCompactJobSummary,
+    normalizeJobSummaryMode,
+  } = formatter;
   const sqlUtils = overrides.sqlUtils || __nccwpck_require__(25824);
   const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword, splitStatements } =
     sqlUtils;
@@ -92889,6 +92945,14 @@ async function run(overrides = {}) {
       return;
     }
     engine = inputCheck.engine;
+
+    let jobSummaryMode;
+    try {
+      jobSummaryMode = normalizeJobSummaryMode(core.getInput('job_summary') || 'full');
+    } catch (modeError) {
+      core.setFailed(modeError.message);
+      return;
+    }
 
     // 3. Resolve SQL source: sql_file > sql_content > repository_dispatch payload
     let sqlContent = '';
@@ -93045,7 +93109,11 @@ async function run(overrides = {}) {
     }
 
     // 8. Generate Markdown Report (compact for Step Summary; full for file / output)
-    log.info('Generating markdown summary report', { engine, phase: 'report' });
+    log.info('Generating markdown summary report', {
+      engine,
+      phase: 'report',
+      jobSummary: jobSummaryMode,
+    });
     const summaryReport = generateMarkdownReport({
       engine,
       sqlContent,
@@ -93071,20 +93139,6 @@ async function run(overrides = {}) {
       fullBytes: Buffer.byteLength(fullReport, 'utf8'),
     });
 
-    // 9. Output to GitHub Step Summary ($GITHUB_STEP_SUMMARY) and Action Outputs
-    try {
-      await core.summary.addRaw(summaryReport).write();
-    } catch (summaryError) {
-      log.warn('Failed to write GitHub Step Summary; full report is in sql-optima-report.md', {
-        engine,
-        phase: 'report',
-        error: summaryError.message,
-      });
-    }
-    // Keep the Action output compact — large scripts exceed GitHub output limits.
-    core.setOutput('report', summaryReport);
-    core.setOutput('report_path', 'sql-optima-report.md');
-
     const allIssues = [
       ...staticIssues,
       ...(dynamicResult.issues || []),
@@ -93103,6 +93157,36 @@ async function run(overrides = {}) {
       shouldFail: gate.shouldFail,
     });
 
+    // 9. Output to GitHub Step Summary ($GITHUB_STEP_SUMMARY) and Action Outputs
+    if (jobSummaryMode !== 'none') {
+      const summaryBody =
+        jobSummaryMode === 'compact'
+          ? generateCompactJobSummary({
+              engine,
+              issueCount: gate.issueCount,
+              highestSeverity: gate.highestSeverity,
+              reportPath: 'sql-optima-report.md',
+            })
+          : summaryReport;
+      try {
+        await core.summary.addRaw(summaryBody).write();
+      } catch (summaryError) {
+        log.warn('Failed to write GitHub Step Summary; full report is in sql-optima-report.md', {
+          engine,
+          phase: 'report',
+          jobSummary: jobSummaryMode,
+          error: summaryError.message,
+        });
+      }
+    } else {
+      log.info('Skipping GitHub Step Summary (job_summary=none)', {
+        engine,
+        phase: 'report',
+      });
+    }
+    // Keep the Action output compact — large scripts exceed GitHub output limits.
+    core.setOutput('report', summaryReport);
+    core.setOutput('report_path', 'sql-optima-report.md');
     core.setOutput('issue_count', String(gate.issueCount));
     core.setOutput('highest_severity', gate.highestSeverity);
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Input `job_summary` (`full` | `compact` | `none`) so consumers can avoid a duplicated Job Summary while still getting `sql-optima-report.md` and outputs ([#88](https://github.com/ale94lko/sql-optima/issues/88)).
+
 ## [1.1.3] - 2026-09-19
 
 ### Added

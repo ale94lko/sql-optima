@@ -50,6 +50,53 @@ function truncateEmbed(text, maxChars, kind) {
 }
 
 /**
+ * Normalize `job_summary` Action input.
+ * @param {string} [value='full']
+ * @returns {'full'|'compact'|'none'}
+ */
+function normalizeJobSummaryMode(value = 'full') {
+  const key = String(value || 'full').trim().toLowerCase();
+  if (key === 'full' || key === 'compact' || key === 'none') {
+    return key;
+  }
+  throw new Error(
+    `Invalid job_summary "${value}". Use full, compact, or none.`,
+  );
+}
+
+/**
+ * Short Job Summary for consumers that append their own narrative.
+ *
+ * @param {Object} options
+ * @param {string} options.engine
+ * @param {number} options.issueCount
+ * @param {string} options.highestSeverity
+ * @param {string} [options.reportPath='sql-optima-report.md']
+ * @returns {string}
+ */
+function generateCompactJobSummary({
+  engine,
+  issueCount,
+  highestSeverity,
+  reportPath = 'sql-optima-report.md',
+}) {
+  const engineLabel = String(engine || 'unknown').toUpperCase();
+  const count = Number.isFinite(issueCount) ? issueCount : 0;
+  const severity = String(highestSeverity || 'NONE').toUpperCase();
+  const pathLabel = String(reportPath || 'sql-optima-report.md');
+
+  return (
+    `## SQL Optima\n\n` +
+    `| Metric | Value |\n` +
+    `| :--- | :--- |\n` +
+    `| **Engine** | \`${engineLabel}\` |\n` +
+    `| **Issues** | \`${count}\` |\n` +
+    `| **Highest severity** | \`${severity}\` |\n\n` +
+    `Full report: \`${pathLabel}\` (upload as a workflow artifact to download).\n`
+  );
+}
+
+/**
  * Generates a GitHub Step Summary Markdown string.
  *
  * @param {Object} options
@@ -215,6 +262,8 @@ function generateMarkdownReport({
 
 module.exports = {
   generateMarkdownReport,
+  generateCompactJobSummary,
+  normalizeJobSummaryMode,
   escapeMarkdownTableCell,
   DEFAULT_SUMMARY_EMBED_LIMITS,
   STEP_SUMMARY_SOFT_LIMIT,

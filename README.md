@@ -41,7 +41,7 @@ More engines, inputs, and samples: see [Usage Examples](#usage-examples) below. 
 - **Static AST Analysis:** Inspects SQL syntax without needing a live database to detect missing primary keys, unindexed foreign key candidates, `SELECT *` usages, and leading wildcard `LIKE` queries.
 - **Dynamic Execution Analysis:** Runs engine-specific explain plans (`EXPLAIN` / `EXPLAIN QUERY PLAN` / `SHOWPLAN_ALL`) against live or in-memory databases. Schema statements (`CREATE` / `INSERT` / …) in `sql_content` are applied before EXPLAIN for Postgres, MySQL/MariaDB, SQLite, and SQL Server.
 - **Dual Triggering:** Supports execution via standard workflow inputs or directly through external API calls (`repository_dispatch`).
-- **GitHub Step Summaries:** Publishes markdown reports to `$GITHUB_STEP_SUMMARY` and Action outputs (`report`, `issue_count`, `highest_severity`). Inline PR review comments are intentionally not posted (keeps default token permissions lean); consume outputs or the Step Summary in your workflow instead.
+- **GitHub Step Summaries:** Publishes markdown reports to `$GITHUB_STEP_SUMMARY` (controllable via [`job_summary`](#input-job-summary): `full` / `compact` / `none`) and Action outputs (`report`, `report_path`, `issue_count`, `highest_severity`). Inline PR review comments are intentionally not posted (keeps default token permissions lean); consume outputs or the Step Summary in your workflow instead.
 
 ---
 
@@ -79,10 +79,13 @@ Prefer SHA-pinning in high-assurance workflows; use `@v1` for Marketplace-style 
 | `db_password` | Database user password (**required** for live engines; ignored for `sqlite` / static-only) | `false` | `""` |
 | <a id="input-fail-on-severity"></a>`fail_on_severity` | Fail the job if any finding ≥ this severity (`none`, `info`, `low`, `medium`, `high`, `critical`) | `false` | `none` |
 | <a id="input-fail-on-types"></a>`fail_on_types` | Comma-separated issue types that always fail (e.g. `MISSING_PRIMARY_KEY,WILDCARD_SELECT`) | `false` | `""` |
+| <a id="input-job-summary"></a>`job_summary` | What to write to `$GITHUB_STEP_SUMMARY`: `full` (default report), `compact` (counts + severity + pointer to `sql-optima-report.md`), or `none` (skip Step Summary; still write the file + outputs) | `false` | `full` |
 
 SQL source resolution order: `sql_file` → `sql_content` → `repository_dispatch` `client_payload.sql_code` / `sql_content`.
 
 Default `fail_on_severity: none` keeps the Action warn-only (report only). Raise the threshold to use it as a CI gate.
+
+When your workflow also appends SQL Optima metrics to the Job Summary, set [`job_summary: none`](#input-job-summary) (or `compact`) so the overview is not duplicated — see [single Job Summary](#single-job-summary).
 
 Live engines (`postgres` / `mysql` / `mssql` families) require an explicit [`db_password`](#inputs); the Action does not embed default credentials.
 
@@ -325,6 +328,48 @@ Fails the job when any finding is HIGH or above. See [`fail_on_severity`](#input
   run: |
     echo "issues=${{ steps.warn.outputs.issue_count }}"
     echo "highest=${{ steps.warn.outputs.highest_severity }}"
+```
+
+### 4. Single Job Summary (avoid duplicates)
+
+Use this when the workflow uploads `sql-optima-report.md` and wants **one** Summary block with metrics + download link:
+
+```yaml
+- name: Analyze SQL
+  id: optima
+  uses: ale94lko/sql-optima@v1
+  with:
+    engine: mysql
+    sql_file: schema.sql
+    db_host: 127.0.0.1
+    db_port: '3306'
+    db_user: root
+    db_password: ${{ secrets.DB_PASSWORD }}
+    job_summary: none   # or compact
+
+- name: Upload report
+  id: upload
+  uses: actions/upload-artifact@v4
+  with:
+    name: sql-optima-report
+    path: ${{ steps.optima.outputs.report_path }}
+
+- name: Job Summary
+  env:
+    ISSUE_COUNT: ${{ steps.optima.outputs.issue_count }}
+    HIGHEST: ${{ steps.optima.outputs.highest_severity }}
+    ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+  run: |
+    {
+      echo "### SQL Optima"
+      echo ""
+      echo "| Metric | Value |"
+      echo "| :--- | :--- |"
+      echo "| Issues | \`$ISSUE_COUNT\` |"
+      echo "| Highest severity | \`$HIGHEST\` |"
+      echo ""
+      echo "[sql-optima-report.md]($ARTIFACT_URL)"
+    } >> "$GITHUB_STEP_SUMMARY"
 ```
 
 ---

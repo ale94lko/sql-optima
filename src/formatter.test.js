@@ -7,7 +7,41 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { generateMarkdownReport } = require('./formatter');
+const {
+  generateMarkdownReport,
+  generateCompactJobSummary,
+  normalizeJobSummaryMode,
+} = require('./formatter');
+
+describe('normalizeJobSummaryMode', () => {
+  it('accepts full, compact, and none (case-insensitive)', () => {
+    expect(normalizeJobSummaryMode('full')).toBe('full');
+    expect(normalizeJobSummaryMode('COMPACT')).toBe('compact');
+    expect(normalizeJobSummaryMode(' None ')).toBe('none');
+    expect(normalizeJobSummaryMode('')).toBe('full');
+  });
+
+  it('rejects unknown values', () => {
+    expect(() => normalizeJobSummaryMode('brief')).toThrow(/Invalid job_summary/);
+  });
+});
+
+describe('generateCompactJobSummary', () => {
+  it('renders counts, severity, and report path pointer', () => {
+    const summary = generateCompactJobSummary({
+      engine: 'mysql',
+      issueCount: 62,
+      highestSeverity: 'MEDIUM',
+    });
+
+    expect(summary).toContain('## SQL Optima');
+    expect(summary).toContain('`MYSQL`');
+    expect(summary).toContain('`62`');
+    expect(summary).toContain('`MEDIUM`');
+    expect(summary).toContain('sql-optima-report.md');
+    expect(summary).not.toContain('Findings & Optimization');
+  });
+});
 
 describe('generateMarkdownReport', () => {
   it('renders a clean report when there are no issues', () => {

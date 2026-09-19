@@ -464,6 +464,73 @@ describe('run', () => {
     expect(postgresAnalyzer.close).toHaveBeenCalled();
   });
 
+  it('skips Step Summary when job_summary is none but still sets outputs', async () => {
+    core.getInput.mockImplementation((name) => {
+      const values = {
+        engine: 'postgres',
+        sql_content: 'SELECT id FROM users;',
+        db_password: 'root',
+        job_summary: 'none',
+      };
+      return values[name] || '';
+    });
+
+    await run(deps());
+
+    expect(core.summary.addRaw).not.toHaveBeenCalled();
+    expect(core.setOutput).toHaveBeenCalledWith('report', '## report');
+    expect(core.setOutput).toHaveBeenCalledWith('report_path', 'sql-optima-report.md');
+    expect(core.setOutput).toHaveBeenCalledWith('issue_count', '1');
+    expect(core.setFailed).not.toHaveBeenCalled();
+  });
+
+  it('writes a compact Step Summary when job_summary is compact', async () => {
+    analyzeStaticSQL.mockReturnValue([
+      { type: 'WILDCARD_SELECT', severity: 'MEDIUM' },
+    ]);
+    core.getInput.mockImplementation((name) => {
+      const values = {
+        engine: 'postgres',
+        sql_content: 'SELECT * FROM users;',
+        db_password: 'root',
+        job_summary: 'compact',
+      };
+      return values[name] || '';
+    });
+
+    await run(deps());
+
+    expect(core.summary.addRaw).toHaveBeenCalledTimes(1);
+    const body = core.summary.addRaw.mock.calls[0][0];
+    expect(body).toContain('## SQL Optima');
+    expect(body).toContain('`1`');
+    expect(body).toContain('`MEDIUM`');
+    expect(body).toContain('sql-optima-report.md');
+    expect(body).not.toBe('## report');
+    expect(core.setOutput).toHaveBeenCalledWith('report', '## report');
+    expect(core.setFailed).not.toHaveBeenCalled();
+  });
+
+  it('fails early on invalid job_summary', async () => {
+    core.getInput.mockImplementation((name) => {
+      const values = {
+        engine: 'postgres',
+        sql_content: 'SELECT 1;',
+        db_password: 'root',
+        job_summary: 'verbose',
+      };
+      return values[name] || '';
+    });
+
+    await run(deps());
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid job_summary'),
+    );
+    expect(analyzeStaticSQL).not.toHaveBeenCalled();
+    expect(core.summary.addRaw).not.toHaveBeenCalled();
+  });
+
   it('exposes issue_count and highest_severity without failing when fail_on_severity is none', async () => {
     analyzeStaticSQL.mockReturnValue([
       { type: 'MISSING_PRIMARY_KEY', severity: 'HIGH' },
