@@ -83,6 +83,8 @@ jobs:
             local pr="$1"
             local owner="${REPO%%/*}"
             local name="${REPO#*/}"
+            # GraphQL variables ($owner/$name/$number), not shell expansions.
+            # shellcheck disable=SC2016
             gh api graphql \
               -f owner="$owner" \
               -f name="$name" \
