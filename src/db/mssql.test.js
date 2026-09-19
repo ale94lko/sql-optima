@@ -117,8 +117,19 @@ describe('MssqlAnalyzer', () => {
     `);
 
     expect(result.executed).toBe(true);
-    expect(result.issues.map((i) => i.type)).toEqual(
-      expect.arrayContaining(['SCHEMA_APPLY_ERROR', 'MSSQL_CLUSTERED_INDEX_SCAN']),
+    expect(result.issues.find((issue) => issue.type === 'SCHEMA_APPLY_ERROR')).toEqual({
+      type: 'SCHEMA_APPLY_ERROR',
+      severity: 'MEDIUM',
+      message: 'Failed to apply schema statement before SHOWPLAN: bad ddl',
+      suggestion:
+        'Ensure CREATE/INSERT statements are valid T-SQL, or pre-seed the SQL Server database.',
+    });
+    expect(result.issues.find((issue) => issue.type === 'MSSQL_CLUSTERED_INDEX_SCAN')).toEqual(
+      expect.objectContaining({
+        type: 'MSSQL_CLUSTERED_INDEX_SCAN',
+        severity: 'MEDIUM',
+        message: expect.stringContaining('800'),
+      }),
     );
   });
 
@@ -200,7 +211,102 @@ describe('MssqlAnalyzer', () => {
     const result = await analyzer.analyzeQuery('SELECT * FROM missing;');
 
     expect(result.executed).toBe(false);
-    expect(result.issues[0].type).toBe('EXPLAIN_EXECUTION_ERROR');
+    expect(result.error).toBe('Failed to execute SHOWPLAN: invalid object');
+    expect(result.issues).toEqual([
+      {
+        type: 'EXPLAIN_EXECUTION_ERROR',
+        severity: 'HIGH',
+        message: 'Database error during execution: invalid object',
+        suggestion:
+          'Ensure referenced tables/columns exist in the SQL Server schema before running dynamic checks.',
+      },
+    ]);
+  });
+
+  it('keeps SCHEMA_APPLY_ERROR when SHOWPLAN fails after a schema apply error', async () => {
+    request.query
+      .mockRejectedValueOnce(new Error('bad ddl'))
+      .mockResolvedValueOnce({ recordset: [] }) // SET SHOWPLAN_ALL ON
+      .mockRejectedValueOnce(new Error('invalid object'))
+      .mockResolvedValueOnce({ recordset: [] }); // SET SHOWPLAN_ALL OFF in finally
+
+    const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
+    const result = await analyzer.analyzeQuery(`
+      CREATE TABLE bad (;
+      SELECT * FROM missing;
+    `);
+
+    expect(result.executed).toBe(false);
+    expect(result.error).toBe('Failed to execute SHOWPLAN: invalid object');
+    expect(result.issues).toEqual([
+      {
+        type: 'SCHEMA_APPLY_ERROR',
+        severity: 'MEDIUM',
+        message: 'Failed to apply schema statement before SHOWPLAN: bad ddl',
+        suggestion:
+          'Ensure CREATE/INSERT statements are valid T-SQL, or pre-seed the SQL Server database.',
+      },
+      {
+        type: 'EXPLAIN_EXECUTION_ERROR',
+        severity: 'HIGH',
+        message: 'Database error during execution: invalid object',
+        suggestion:
+          'Ensure referenced tables/columns exist in the SQL Server schema before running dynamic checks.',
+      },
+    ]);
+  });
+
+  it('swallows SHOWPLAN_ALL OFF failures after a successful plan', async () => {
+    request.query
+      .mockResolvedValueOnce({ recordset: [] }) // SET SHOWPLAN_ALL ON
+      .mockResolvedValueOnce({
+        recordset: [
+          {
+            PhysicalOp: 'Index Seek',
+            EstimateRows: 1,
+            TotalSubtreeCost: 0.01,
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error('restore failed'));
+
+    const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
+    const result = await analyzer.analyzeQuery('SELECT 1;');
+
+    expect(result.executed).toBe(true);
+    expect(result.totalCost).toBe(0.01);
+    expect(result.issues).toEqual([]);
+    expect(result.error).toBeUndefined();
+  });
+
+  it('connects through testConnection when analyzeQuery has no injected pool', async () => {
+    request.query
+      .mockResolvedValueOnce({ recordset: [{ ok: 1 }] }) // testConnection SELECT 1
+      .mockResolvedValueOnce({ recordset: [] }) // SET ON
+      .mockResolvedValueOnce({ recordset: [] }) // plan
+      .mockResolvedValueOnce({ recordset: [] }); // SET OFF
+
+    const analyzer = new MssqlAnalyzer({}, { sql: sqlModule });
+    const result = await analyzer.analyzeQuery('SELECT 1;');
+
+    expect(sqlModule.connect).toHaveBeenCalled();
+    expect(result.executed).toBe(true);
+    expect(result.issues).toEqual([]);
+  });
+
+  it('treats a missing SHOWPLAN recordset as an empty plan', async () => {
+    request.query
+      .mockResolvedValueOnce({ recordset: [] }) // SET ON
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ recordset: [] }); // SET OFF
+
+    const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
+    const result = await analyzer.analyzeQuery('SELECT 1;');
+
+    expect(result.executed).toBe(true);
+    expect(result.totalCost).toBeNull();
+    expect(result.issues).toEqual([]);
+    expect(result.rawPlan).toEqual([]);
   });
 
   it('closes an owned pool', async () => {
