@@ -99,11 +99,17 @@ The lint job’s `npm audit --audit-level=high` fails the PR on high/critical ad
 
 ## Pull requests
 
-1. Fork the repository and create a focused branch.
-2. Sign off commits (DCO) with `git commit -s`.
-3. Keep changes small: one feature or fix per PR, with tests that pin the new behavior.
-4. Link the PR to the related issue when applicable.
-5. Fill out the pull request template.
+1. Fork the repository and create a focused branch named after the issue:
+   - Prefer `{type}/{issue}-{slug}` (e.g. `feat/66-readme-logo`, `ci/78-pr-metadata-validator`)
+   - Or `{type}/{slug}-{issue}` (e.g. `chore/docker-compose-postgres-51`)
+   - Allowed types: `feat`, `fix`, `docs`, `ci`, `chore`, `test`, `refactor`, `security`, `release`, `perf`, `build`, `style`
+2. Use a Conventional Commits PR title (`feat: …`, `fix: …`, `ci: …`, …).
+3. Sign off commits (DCO) with `git commit -s`.
+4. Keep changes small: one feature or fix per PR, with tests that pin the new behavior.
+5. Link the PR to the related issue (`Fixes #<issue>` in the body) so [issue-in-progress](.github/workflows/issue-in-progress.yml) can label and assign it.
+6. Fill out the pull request template.
+
+CI enforces branch + title rules via [pr-metadata-validator](https://github.com/ale94lko/pr-metadata-validator) (`.github/workflows/validate-pr-metadata.yml`).
 
 ## Dependabot updates
 
