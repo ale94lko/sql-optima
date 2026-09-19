@@ -144,7 +144,7 @@ Checked-in fixtures under [`examples/`](examples/) intentionally trigger the fin
 
 #### A) In this repository’s CI (`push` / PR via `ci.yml`, or `workflow_dispatch` demo)
 
-The [CI workflow](.github/workflows/ci.yml) runs unit tests, lint, a `dist/` freshness check, and loads sample fixtures against Postgres/MySQL/MariaDB/SQLite/SQL Server (plus static BigQuery/Snowflake). Manual API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml).
+The [CI workflow](.github/workflows/ci.yml) runs unit tests, lint, a `dist/` freshness check, a default-path `integration` job against live Postgres/MySQL/SQL Server, and per-engine sample fixtures (plus static BigQuery/Snowflake). Manual API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
 #### B) From a consumer workflow (inline file contents)
 

@@ -4,6 +4,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -135,6 +138,20 @@ describe('analyzeStaticSQL', () => {
     const issues = analyzeStaticSQL('DROP TABLE IF EXISTS users;');
 
     expect(issues).toEqual([]);
+  });
+
+  it('CI mixed fixtures produce static findings (integration job gate)', () => {
+    const examplesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'examples');
+    const fixtures = [
+      ['mixed_postgres.sql', 'postgres'],
+      ['mixed_mysql.sql', 'mysql'],
+      ['mixed_mssql.sql', 'mssql'],
+    ];
+
+    for (const [file, engine] of fixtures) {
+      const sql = readFileSync(join(examplesDir, file), 'utf8');
+      expect(analyzeStaticSQL(sql, engine).length, file).toBeGreaterThan(0);
+    }
   });
 
   it('normalizes nested column identifiers through getColumnName', () => {
