@@ -55,6 +55,10 @@ function analyzeStaticSQL(sqlContent, engine = 'postgres') {
 }
 
 /**
+ * @typedef {{ expr?: { value?: unknown }, value?: unknown, column?: string | { expr?: { value?: unknown } } }} SqlColumnNode
+ */
+
+/**
  * Normalizes node-sql-parser column identifiers to a plain string.
  * @param {unknown} column
  * @returns {string|null}
@@ -65,17 +69,18 @@ function getColumnName(column) {
   }
 
   if (column && typeof column === 'object') {
-    if (typeof column.expr?.value === 'string') {
-      return column.expr.value;
+    const node = /** @type {SqlColumnNode} */ (column);
+    if (typeof node.expr?.value === 'string') {
+      return node.expr.value;
     }
-    if (typeof column.value === 'string') {
-      return column.value;
+    if (typeof node.value === 'string') {
+      return node.value;
     }
-    if (typeof column.column === 'string') {
-      return column.column;
+    if (typeof node.column === 'string') {
+      return node.column;
     }
-    if (typeof column.column?.expr?.value === 'string') {
-      return column.column.expr.value;
+    if (typeof node.column === 'object' && typeof node.column.expr?.value === 'string') {
+      return node.column.expr.value;
     }
   }
 

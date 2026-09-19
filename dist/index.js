@@ -91444,6 +91444,10 @@ function analyzeStaticSQL(sqlContent, engine = 'postgres') {
 }
 
 /**
+ * @typedef {{ expr?: { value?: unknown }, value?: unknown, column?: string | { expr?: { value?: unknown } } }} SqlColumnNode
+ */
+
+/**
  * Normalizes node-sql-parser column identifiers to a plain string.
  * @param {unknown} column
  * @returns {string|null}
@@ -91454,17 +91458,18 @@ function getColumnName(column) {
   }
 
   if (column && typeof column === 'object') {
-    if (typeof column.expr?.value === 'string') {
-      return column.expr.value;
+    const node = /** @type {SqlColumnNode} */ (column);
+    if (typeof node.expr?.value === 'string') {
+      return node.expr.value;
     }
-    if (typeof column.value === 'string') {
-      return column.value;
+    if (typeof node.value === 'string') {
+      return node.value;
     }
-    if (typeof column.column === 'string') {
-      return column.column;
+    if (typeof node.column === 'string') {
+      return node.column;
     }
-    if (typeof column.column?.expr?.value === 'string') {
-      return column.column.expr.value;
+    if (typeof node.column === 'object' && typeof node.column.expr?.value === 'string') {
+      return node.column.expr.value;
     }
   }
 
@@ -91645,6 +91650,7 @@ class MssqlAnalyzer {
    * @param {Object} [dependencies] - Optional test doubles.
    * @param {Object} [dependencies.pool] - Injected mssql ConnectionPool-like object.
    * @param {Object} [dependencies.sql] - Injected mssql module (for connect).
+   * @param {Object} [dependencies.logger] - Optional structured logger.
    */
   constructor(config, dependencies = {}) {
     this.logger = dependencies.logger || null;
@@ -91875,6 +91881,7 @@ class MySQLAnalyzer {
    * @param {Object} config - Database connection options.
    * @param {Object} [dependencies] - Optional test doubles.
    * @param {Object} [dependencies.pool] - Injected mysql2 pool.
+   * @param {Object} [dependencies.logger] - Optional structured logger.
    */
   constructor(config, dependencies = {}) {
     this.logger = dependencies.logger || null;
@@ -92110,6 +92117,7 @@ class PostgresAnalyzer {
    * @param {Object} config - Database connection options.
    * @param {Object} [dependencies] - Optional test doubles.
    * @param {import('pg').Pool} [dependencies.pool] - Injected pool instance.
+   * @param {Object} [dependencies.logger] - Optional structured logger.
    */
   constructor(config, dependencies = {}) {
     this.logger = dependencies.logger || null;
@@ -92327,6 +92335,7 @@ class SqliteAnalyzer {
    * @param {Object} [config]
    * @param {Object} [dependencies]
    * @param {Function} [dependencies.initSqlJs] - Injected sql.js initializer for tests.
+   * @param {Object} [dependencies.logger] - Optional structured logger.
    */
   constructor(config = {}, dependencies = {}) {
     this.config = config;
@@ -93020,7 +93029,7 @@ function validateActionInputs(inputs = {}) {
     return engineResult;
   }
   const portResult = validateDbPort(inputs.dbPort);
-  if (!portResult.ok) {
+  if (portResult.ok === false) {
     return portResult;
   }
   return { ok: true, engine: engineResult.engine, port: portResult.port };
@@ -93106,7 +93115,7 @@ function formatLogLine(level, message, fields) {
  * Create a leveled logger.
  *
  * @param {Object} [options]
- * @param {Pick<import('@actions/core'), 'debug'|'info'|'warning'|'error'>} [options.core]
+ * @param {Pick<typeof import('@actions/core'), 'debug'|'info'|'warning'|'error'>} [options.core]
  * @param {(record: {level: string, msg: string, fields: Record<string, unknown>, line: string}) => void} [options.sink]
  *   Optional test sink that receives the structured record (already redacted).
  */
@@ -93247,7 +93256,7 @@ function normalizeFailOnSeverity(value = 'none') {
  * Evaluate whether findings should fail the Action.
  *
  * @param {Object} options
- * @param {Array<{type?: string, severity?: string}>} options.issues
+ * @param {Array<{type?: string, severity?: string}>} [options.issues]
  * @param {string} [options.failOnSeverity='none']
  * @param {string} [options.failOnTypes='']
  * @returns {{

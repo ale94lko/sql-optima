@@ -21,6 +21,7 @@ class SqliteAnalyzer {
    * @param {Object} [config]
    * @param {Object} [dependencies]
    * @param {Function} [dependencies.initSqlJs] - Injected sql.js initializer for tests.
+   * @param {Object} [dependencies.logger] - Optional structured logger.
    */
   constructor(config = {}, dependencies = {}) {
     this.config = config;

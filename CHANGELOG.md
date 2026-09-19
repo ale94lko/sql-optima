@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README Usage Examples snippet for `fail_on_severity: high`, linked to Inputs ([#41](https://github.com/ale94lko/sql-optima/issues/41)).
 - Validate `engine` and `db_port` before analysis ([#47](https://github.com/ale94lko/sql-optima/issues/47)).
 - CI lint job runs `npm audit --audit-level=high` ([#45](https://github.com/ale94lko/sql-optima/issues/45)).
+- CI `typecheck` job runs `tsc --noEmit` with `checkJs` against JSDoc in `src/` ([#71](https://github.com/ale94lko/sql-optima/issues/71)).
 
 ### Changed
 

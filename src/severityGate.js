@@ -81,7 +81,7 @@ function normalizeFailOnSeverity(value = 'none') {
  * Evaluate whether findings should fail the Action.
  *
  * @param {Object} options
- * @param {Array<{type?: string, severity?: string}>} options.issues
+ * @param {Array<{type?: string, severity?: string}>} [options.issues]
  * @param {string} [options.failOnSeverity='none']
  * @param {string} [options.failOnTypes='']
  * @returns {{

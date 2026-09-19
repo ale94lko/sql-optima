@@ -97,7 +97,7 @@ function validateActionInputs(inputs = {}) {
     return engineResult;
   }
   const portResult = validateDbPort(inputs.dbPort);
-  if (!portResult.ok) {
+  if (portResult.ok === false) {
     return portResult;
   }
   return { ok: true, engine: engineResult.engine, port: portResult.port };
