@@ -182,7 +182,7 @@ describe('MssqlAnalyzer', () => {
   it('truncates StmtText in MSSQL_CLUSTERED_INDEX_SCAN messages to 120 characters', () => {
     const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
     const issues = [];
-    const stmtText = `SELECT ${'x'.repeat(200)}`;
+    const stmtText = `${'A'.repeat(120)}UNIQUE_TAIL`;
     analyzer.inspectPlanRow(
       {
         PhysicalOp: 'Clustered Index Scan',
@@ -193,12 +193,14 @@ describe('MssqlAnalyzer', () => {
     );
 
     expect(issues).toHaveLength(1);
-    expect(issues[0].type).toBe('MSSQL_CLUSTERED_INDEX_SCAN');
-    expect(issues[0].severity).toBe('MEDIUM');
-    expect(issues[0].message).toBe(
-      `Clustered Index Scan with high estimated rows (501): ${stmtText.slice(0, 120)}`,
-    );
-    expect(issues[0].message).not.toContain(stmtText.slice(120));
+    expect(issues[0]).toEqual({
+      type: 'MSSQL_CLUSTERED_INDEX_SCAN',
+      severity: 'MEDIUM',
+      message: `Clustered Index Scan with high estimated rows (501): ${'A'.repeat(120)}`,
+      suggestion:
+        'Consider a covering nonclustered index so the optimizer can use Index Seek instead of a full clustered scan.',
+    });
+    expect(issues[0].message).not.toContain('UNIQUE_TAIL');
   });
 
   it('returns an execution error when SHOWPLAN fails', async () => {
