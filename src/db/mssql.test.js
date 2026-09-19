@@ -221,6 +221,63 @@ describe('MssqlAnalyzer', () => {
     const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
     const issues = [];
     analyzer.inspectPlanRow(null, issues);
+    analyzer.inspectPlanRow({}, issues);
+    expect(issues).toEqual([]);
+  });
+
+  it('flags a MEDIUM MSSQL_TABLE_SCAN when only LogicalOp reports a table scan', () => {
+    const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
+    const issues = [];
+    analyzer.inspectPlanRow(
+      {
+        LogicalOp: 'Table Scan',
+        EstimateRows: 1000,
+      },
+      issues,
+    );
+
+    expect(issues).toEqual([
+      {
+        type: 'MSSQL_TABLE_SCAN',
+        severity: 'MEDIUM',
+        message: 'Table Scan detected (Table Scan; estimated rows: 1000).',
+        suggestion:
+          'Add a supporting nonclustered index covering the filter/join columns referenced by the query.',
+      },
+    ]);
+  });
+
+  it('flags MSSQL_EXPENSIVE_SORT when estimated I/O is above 10', () => {
+    const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
+    const issues = [];
+    analyzer.inspectPlanRow(
+      {
+        PhysicalOp: 'Sort',
+        EstimateIO: 10.1,
+      },
+      issues,
+    );
+
+    expect(issues).toEqual([
+      {
+        type: 'MSSQL_EXPENSIVE_SORT',
+        severity: 'MEDIUM',
+        message: 'Sort operator with elevated estimated I/O (10.1).',
+        suggestion: 'Add an index matching ORDER BY / GROUP BY columns to avoid expensive sorts.',
+      },
+    ]);
+  });
+
+  it('does not flag MSSQL_EXPENSIVE_SORT when estimated I/O is at most 10', () => {
+    const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
+    const issues = [];
+    analyzer.inspectPlanRow(
+      {
+        PhysicalOp: 'Sort',
+        EstimateIO: 10,
+      },
+      issues,
+    );
     expect(issues).toEqual([]);
   });
 });
