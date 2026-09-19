@@ -101,7 +101,9 @@ async function run(overrides = {}) {
 
     // 4. Execute Static AST Analysis
     log.info('Running static AST analysis', { engine, phase: 'static', statementCount });
-    const staticIssues = analyzeStaticSQL(sqlContent, engine);
+    const staticIssues = analyzeStaticSQL(sqlContent, engine, {
+      sourcePath: sqlFile || null,
+    });
     log.info('Static analysis complete', {
       engine,
       phase: 'static',

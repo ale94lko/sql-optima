@@ -96,6 +96,8 @@ Live engines (`postgres` / `mysql` / `mssql` families) require an explicit [`db_
 | `issue_count` | Total number of static + dynamic findings. |
 | `highest_severity` | Highest finding severity (`NONE`, `INFO`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`). |
 
+Static `SYNTAX_ERROR` findings include `line`, `column`, `location` (e.g. `path/to.sql:12:4` when `sql_file` is set), and a short `snippet` (±2 lines) rendered in the Markdown report.
+
 ---
 
 ## Try it with sample SQL

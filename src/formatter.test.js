@@ -98,6 +98,31 @@ describe('generateMarkdownReport', () => {
     expect(report).toContain('"Node Type": "Seq Scan"');
   });
 
+  it('renders a Location column and context snippet for SYNTAX_ERROR findings', () => {
+    const report = generateMarkdownReport({
+      engine: 'mysql',
+      sqlContent: 'SELECT !!!;',
+      staticIssues: [
+        {
+          type: 'SYNTAX_ERROR',
+          severity: 'CRITICAL',
+          location: 'db/tenants/bad.sql:2:11',
+          line: 2,
+          column: 11,
+          message: 'db/tenants/bad.sql:2:11 — Failed to parse SQL syntax: boom',
+          suggestion: 'Ensure the SQL syntax is valid for the selected database engine.',
+          snippet: '  1 | SELECT id FROM users;\n> 2 | SELECT !!! FROM broken;\n  3 | SELECT 1;',
+        },
+      ],
+      dynamicResult: { executed: false, issues: [] },
+    });
+
+    expect(report).toContain('| Location |');
+    expect(report).toContain('`db/tenants/bad.sql:2:11`');
+    expect(report).toContain('Context at db/tenants/bad.sql:2:11');
+    expect(report).toContain('SELECT !!! FROM broken;');
+  });
+
   it('renders dynamic execution errors', () => {
     const report = generateMarkdownReport({
       engine: 'postgres',

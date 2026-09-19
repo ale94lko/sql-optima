@@ -141,8 +141,17 @@ function generateMarkdownReport({
   if (allIssues.length === 0) {
     markdown += `🎉 **No issues or anti-patterns detected! Your SQL schema and query look optimal.**\n\n`;
   } else {
-    markdown += `| Severity | Issue Type | Message & Recommendation |\n`;
-    markdown += `| :---: | :--- | :--- |\n`;
+    const hasLocation = allIssues.some(
+      (issue) => issue.location || (issue.line != null && issue.column != null),
+    );
+
+    if (hasLocation) {
+      markdown += `| Severity | Issue Type | Location | Message & Recommendation |\n`;
+      markdown += `| :---: | :--- | :--- | :--- |\n`;
+    } else {
+      markdown += `| Severity | Issue Type | Message & Recommendation |\n`;
+      markdown += `| :---: | :--- | :--- |\n`;
+    }
 
     allIssues.forEach((issue) => {
       const badge = getSeverityBadge(issue.severity);
@@ -151,10 +160,29 @@ function generateMarkdownReport({
         ? `<br>👉 *${escapeMarkdownTableCell(issue.suggestion)}*`
         : '';
 
-      markdown += `| ${badge} | \`${issue.type}\` | ${message}${suggestion} |\n`;
+      if (hasLocation) {
+        const location =
+          issue.location ||
+          (issue.line != null
+            ? `L${issue.line}:C${issue.column != null ? issue.column : '?'}`
+            : '—');
+        markdown += `| ${badge} | \`${issue.type}\` | \`${escapeMarkdownTableCell(location)}\` | ${message}${suggestion} |\n`;
+      } else {
+        markdown += `| ${badge} | \`${issue.type}\` | ${message}${suggestion} |\n`;
+      }
     });
 
     markdown += `\n`;
+
+    const withSnippets = allIssues.filter(
+      (issue) => typeof issue.snippet === 'string' && issue.snippet.trim() !== '',
+    );
+    withSnippets.forEach((issue) => {
+      const label = issue.location || `L${issue.line}:C${issue.column}`;
+      markdown += `<details>\n<summary>📍 <b>Context at ${escapeMarkdownTableCell(label)}</b></summary>\n\n`;
+      markdown += `\`\`\`sql\n${issue.snippet}\n\`\`\`\n\n`;
+      markdown += `</details>\n\n`;
+    });
   }
 
   // 5. Raw EXPLAIN JSON Collapsible Block (if executed)

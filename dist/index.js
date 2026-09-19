@@ -91401,12 +91401,17 @@ const { resolveParserDialect } = __nccwpck_require__(25824);
  *
  * @param {string} sqlContent - Raw SQL query or schema definition string.
  * @param {string} engine - Target SQL engine ('postgres' | 'mysql' | 'mariadb' | 'sqlite' | ...).
+ * @param {{ sourcePath?: string|null }} [options] - Optional source path (e.g. `sql_file`) for locations.
  * @returns {Array<Object>} List of issue objects containing type, severity, message, and suggestion.
  */
-function analyzeStaticSQL(sqlContent, engine = 'postgres') {
+function analyzeStaticSQL(sqlContent, engine = 'postgres', options = {}) {
   const parser = new Parser();
   const issues = [];
   const dialect = resolveParserDialect(engine);
+  const sourcePath =
+    typeof options.sourcePath === 'string' && options.sourcePath.trim()
+      ? options.sourcePath.trim()
+      : null;
 
   try {
     // Parse SQL string into AST (handles single or multiple statements)
@@ -91432,15 +91437,92 @@ function analyzeStaticSQL(sqlContent, engine = 'postgres') {
       }
     });
   } catch (error) {
-    issues.push({
-      type: 'SYNTAX_ERROR',
-      severity: 'CRITICAL',
-      message: `Failed to parse SQL syntax: ${error.message}`,
-      suggestion: 'Ensure the SQL syntax is valid for the selected database engine.',
-    });
+    issues.push(buildSyntaxErrorIssue(error, sqlContent, sourcePath));
   }
 
   return issues;
+}
+
+/**
+ * Reads 1-based line/column from a node-sql-parser / peg.js SyntaxError.
+ * @param {unknown} error
+ * @returns {{ line: number, column: number, endLine?: number, endColumn?: number }|null}
+ */
+function extractParseLocation(error) {
+  if (!error || typeof error !== 'object') return null;
+  const loc = /** @type {{ location?: { start?: { line?: number, column?: number }, end?: { line?: number, column?: number } }, loc?: { start?: { line?: number, column?: number }, end?: { line?: number, column?: number } } }} */ (
+    error
+  ).location || /** @type {{ loc?: { start?: { line?: number, column?: number }, end?: { line?: number, column?: number } } }} */ (error).loc;
+  const start = loc?.start;
+  if (!start || typeof start.line !== 'number' || typeof start.column !== 'number') {
+    return null;
+  }
+  /** @type {{ line: number, column: number, endLine?: number, endColumn?: number }} */
+  const result = { line: start.line, column: start.column };
+  if (typeof loc?.end?.line === 'number') result.endLine = loc.end.line;
+  if (typeof loc?.end?.column === 'number') result.endColumn = loc.end.column;
+  return result;
+}
+
+/**
+ * Builds a numbered ±radius context snippet around a 1-based line.
+ * @param {string} sqlContent
+ * @param {number} line
+ * @param {number} [radius]
+ * @returns {string|null}
+ */
+function extractSqlContextSnippet(sqlContent, line, radius = 2) {
+  if (!Number.isInteger(line) || line < 1) return null;
+  const lines = String(sqlContent ?? '').split(/\r?\n/);
+  if (lines.length === 0) return null;
+  const start = Math.max(1, line - radius);
+  const end = Math.min(lines.length, line + radius);
+  const width = String(end).length;
+  const out = [];
+  for (let i = start; i <= end; i += 1) {
+    const marker = i === line ? '>' : ' ';
+    out.push(`${marker} ${String(i).padStart(width, ' ')} | ${lines[i - 1] ?? ''}`);
+  }
+  return out.join('\n');
+}
+
+/**
+ * @param {Error & { location?: unknown }} error
+ * @param {string} sqlContent
+ * @param {string|null} sourcePath
+ * @returns {Object}
+ */
+function buildSyntaxErrorIssue(error, sqlContent, sourcePath) {
+  const loc = extractParseLocation(error);
+  const baseMessage = `Failed to parse SQL syntax: ${error?.message || 'Unknown parse error'}`;
+  /** @type {Record<string, unknown>} */
+  const issue = {
+    type: 'SYNTAX_ERROR',
+    severity: 'CRITICAL',
+    message: baseMessage,
+    suggestion: 'Ensure the SQL syntax is valid for the selected database engine.',
+  };
+
+  if (!loc) {
+    return issue;
+  }
+
+  issue.line = loc.line;
+  issue.column = loc.column;
+  if (loc.endLine != null) issue.endLine = loc.endLine;
+  if (loc.endColumn != null) issue.endColumn = loc.endColumn;
+
+  const locationLabel = sourcePath
+    ? `${sourcePath}:${loc.line}:${loc.column}`
+    : `L${loc.line}:C${loc.column}`;
+  issue.location = locationLabel;
+  if (sourcePath) issue.source = sourcePath;
+
+  const snippet = extractSqlContextSnippet(sqlContent, loc.line);
+  if (snippet) issue.snippet = snippet;
+
+  issue.message = `${locationLabel} — ${baseMessage}`;
+  return issue;
 }
 
 /**
@@ -91619,6 +91701,9 @@ function inspectWhereClause(whereNode, issues) {
 module.exports = {
   analyzeStaticSQL,
   getColumnName,
+  extractParseLocation,
+  extractSqlContextSnippet,
+  buildSyntaxErrorIssue,
 };
 
 
@@ -92661,8 +92746,17 @@ function generateMarkdownReport({
   if (allIssues.length === 0) {
     markdown += `🎉 **No issues or anti-patterns detected! Your SQL schema and query look optimal.**\n\n`;
   } else {
-    markdown += `| Severity | Issue Type | Message & Recommendation |\n`;
-    markdown += `| :---: | :--- | :--- |\n`;
+    const hasLocation = allIssues.some(
+      (issue) => issue.location || (issue.line != null && issue.column != null),
+    );
+
+    if (hasLocation) {
+      markdown += `| Severity | Issue Type | Location | Message & Recommendation |\n`;
+      markdown += `| :---: | :--- | :--- | :--- |\n`;
+    } else {
+      markdown += `| Severity | Issue Type | Message & Recommendation |\n`;
+      markdown += `| :---: | :--- | :--- |\n`;
+    }
 
     allIssues.forEach((issue) => {
       const badge = getSeverityBadge(issue.severity);
@@ -92671,10 +92765,29 @@ function generateMarkdownReport({
         ? `<br>👉 *${escapeMarkdownTableCell(issue.suggestion)}*`
         : '';
 
-      markdown += `| ${badge} | \`${issue.type}\` | ${message}${suggestion} |\n`;
+      if (hasLocation) {
+        const location =
+          issue.location ||
+          (issue.line != null
+            ? `L${issue.line}:C${issue.column != null ? issue.column : '?'}`
+            : '—');
+        markdown += `| ${badge} | \`${issue.type}\` | \`${escapeMarkdownTableCell(location)}\` | ${message}${suggestion} |\n`;
+      } else {
+        markdown += `| ${badge} | \`${issue.type}\` | ${message}${suggestion} |\n`;
+      }
     });
 
     markdown += `\n`;
+
+    const withSnippets = allIssues.filter(
+      (issue) => typeof issue.snippet === 'string' && issue.snippet.trim() !== '',
+    );
+    withSnippets.forEach((issue) => {
+      const label = issue.location || `L${issue.line}:C${issue.column}`;
+      markdown += `<details>\n<summary>📍 <b>Context at ${escapeMarkdownTableCell(label)}</b></summary>\n\n`;
+      markdown += `\`\`\`sql\n${issue.snippet}\n\`\`\`\n\n`;
+      markdown += `</details>\n\n`;
+    });
   }
 
   // 5. Raw EXPLAIN JSON Collapsible Block (if executed)
@@ -92822,7 +92935,9 @@ async function run(overrides = {}) {
 
     // 4. Execute Static AST Analysis
     log.info('Running static AST analysis', { engine, phase: 'static', statementCount });
-    const staticIssues = analyzeStaticSQL(sqlContent, engine);
+    const staticIssues = analyzeStaticSQL(sqlContent, engine, {
+      sourcePath: sqlFile || null,
+    });
     log.info('Static analysis complete', {
       engine,
       phase: 'static',

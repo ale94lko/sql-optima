@@ -95,8 +95,39 @@ describe('analyzeStaticSQL', () => {
       expect.objectContaining({
         type: 'SYNTAX_ERROR',
         severity: 'CRITICAL',
+        line: 1,
+        column: expect.any(Number),
+        location: expect.stringMatching(/^L1:C\d+$/),
+        snippet: expect.stringContaining('NOT VALID SQL !!!'),
       }),
     ]);
+  });
+
+  it('includes line/column and source path on SYNTAX_ERROR findings', () => {
+    const sql = [
+      'SELECT id FROM users;',
+      'SELECT !!! FROM broken;',
+      'SELECT 1;',
+    ].join('\n');
+
+    const issues = analyzeStaticSQL(sql, 'mysql', {
+      sourcePath: 'db/tenants/bad.sql',
+    });
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toEqual(
+      expect.objectContaining({
+        type: 'SYNTAX_ERROR',
+        severity: 'CRITICAL',
+        line: 2,
+        column: expect.any(Number),
+        source: 'db/tenants/bad.sql',
+        location: expect.stringMatching(/^db\/tenants\/bad\.sql:2:\d+$/),
+        message: expect.stringMatching(/^db\/tenants\/bad\.sql:2:\d+ — Failed to parse SQL syntax:/),
+        snippet: expect.stringContaining('> 2 |'),
+      }),
+    );
+    expect(issues[0].snippet).toContain('SELECT !!! FROM broken;');
   });
 
   it('supports the mysql dialect', () => {

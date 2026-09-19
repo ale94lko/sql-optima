@@ -123,7 +123,7 @@ describe('run', () => {
 
     await run(deps());
 
-    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT name FROM users;', 'mariadb');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT name FROM users;', 'mariadb', { sourcePath: null });
     expect(MySQLAnalyzer).toHaveBeenCalled();
   });
 
@@ -223,7 +223,7 @@ describe('run', () => {
     }
 
     expect(fs.readFileSync).toHaveBeenCalledWith(expected, 'utf8');
-    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM file_table;', 'postgres');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM file_table;', 'postgres', { sourcePath: 'examples/mixed_postgres.sql' });
   });
 
   it('prefers sql_content input over repository_dispatch payload', async () => {
@@ -242,7 +242,7 @@ describe('run', () => {
 
     await run(deps());
 
-    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM input_table;', 'postgresql');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM input_table;', 'postgresql', { sourcePath: null });
   });
 
   it('uses repository_dispatch payload when inputs are empty', async () => {
@@ -260,7 +260,7 @@ describe('run', () => {
 
     await run(deps());
 
-    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT * FROM orders;', 'postgresql');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT * FROM orders;', 'postgresql', { sourcePath: null });
     expect(postgresAnalyzer.testConnection).toHaveBeenCalled();
     expect(postgresAnalyzer.analyzeQuery).toHaveBeenCalledWith('SELECT * FROM orders;');
     expect(generateMarkdownReport).toHaveBeenCalled();
@@ -393,7 +393,7 @@ describe('run', () => {
 
     await run(deps());
 
-    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT 1;', 'bigquery');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT 1;', 'bigquery', { sourcePath: null });
     expect(generateMarkdownReport).toHaveBeenCalledWith(
       expect.objectContaining({
         dynamicResult: expect.objectContaining({
