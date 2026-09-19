@@ -103,6 +103,59 @@ describe('MySQLAnalyzer', () => {
     expect(result.issues.find((issue) => issue.type === 'FULL_TABLE_SCAN').severity).toBe('HIGH');
   });
 
+  it('flags MYSQL_TEMPORARY_TABLE from query_block ordering_operation', async () => {
+    connection.query.mockResolvedValue([
+      [
+        {
+          EXPLAIN: {
+            query_block: {
+              cost_info: { query_cost: '3.50' },
+              ordering_operation: {
+                using_temporary_table: true,
+              },
+            },
+          },
+        },
+      ],
+    ]);
+
+    const analyzer = new MySQLAnalyzer({}, { pool });
+    const result = await analyzer.analyzeQuery('SELECT DISTINCT name FROM users;');
+
+    expect(result.executed).toBe(true);
+    expect(result.totalCost).toBe('3.50');
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]).toEqual({
+      type: 'MYSQL_TEMPORARY_TABLE',
+      severity: 'HIGH',
+      message: 'Query creates an in-memory or disk temporary table during execution.',
+      suggestion: 'Optimize GROUP BY or DISTINCT clauses with proper composite indexes.',
+    });
+    expect(connection.release).toHaveBeenCalled();
+  });
+
+  it('flags MYSQL_TEMPORARY_TABLE without also requiring filesort', () => {
+    const analyzer = new MySQLAnalyzer({}, { pool });
+    const issues = [];
+    analyzer.inspectQueryBlock(
+      {
+        ordering_operation: {
+          using_temporary_table: true,
+        },
+      },
+      issues,
+    );
+
+    expect(issues).toEqual([
+      {
+        type: 'MYSQL_TEMPORARY_TABLE',
+        severity: 'HIGH',
+        message: 'Query creates an in-memory or disk temporary table during execution.',
+        suggestion: 'Optimize GROUP BY or DISTINCT clauses with proper composite indexes.',
+      },
+    ]);
+  });
+
   it('records SCHEMA_APPLY_ERROR and still attempts EXPLAIN', async () => {
     connection.query
       .mockRejectedValueOnce(new Error('syntax error'))
