@@ -370,6 +370,30 @@ node dist/index.js
 
 Stop the stack with `docker compose down` when finished.
 
+### Run in Docker
+
+A root [`Dockerfile`](Dockerfile) builds and runs the Action with **Node 24** so a fresh clone does not need a local Node toolchain. This is the Action image, not a replacement for [`docker-compose.yml`](docker-compose.yml) (that file still starts optional local Postgres only).
+
+```bash
+docker build -t sql-optima .
+```
+
+`ENTRYPOINT` is `node dist/index.js`. GitHub Actions maps `action.yml` inputs to `INPUT_*` environment variables (uppercase, underscores) — `engine=` / `sql_file=` shorthand is not read.
+
+Smoke (in-memory SQLite; no extra database service). The image defaults to the mixed SQLite fixture so a bare run is enough:
+
+```bash
+docker run --rm sql-optima
+```
+
+Verified smoke (same fixture; expect exit 0 and a markdown report with findings):
+
+```bash
+docker run --rm -e INPUT_ENGINE=sqlite -e INPUT_SQL_FILE=examples/mixed_sqlite.sql sql-optima
+```
+
+`examples/mixed_sqlite.sql` is copied into the image. Live engines still need a reachable database and `INPUT_DB_PASSWORD` (see [Optional local Postgres](#optional-local-postgres-dynamic-analysis)).
+
 ### Build
 
 Requires **Node.js 24+** (`engines.node` in `package.json`; matches Action `runs.using: node24` and CI).
