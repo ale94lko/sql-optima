@@ -4,6 +4,7 @@
 [![Health Score](https://raw.githubusercontent.com/ale94lko/sql-optima/output/badge.svg)](https://github.com/ale94lko/sql-optima/community)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14693/badge)](https://www.bestpractices.dev/projects/14693)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-SQL%20Optima%20Action-blue?style=flat-square&logo=github)](https://github.com/marketplace/actions/sql-optima-action)
+[![Latest release](https://img.shields.io/github/v/release/ale94lko/sql-optima?style=flat-square&label=release)](https://github.com/ale94lko/sql-optima/releases/latest)
 [![CI](https://github.com/ale94lko/sql-optima/actions/workflows/ci.yml/badge.svg)](https://github.com/ale94lko/sql-optima/actions/workflows/ci.yml)
 [![Node.js CI](https://img.shields.io/badge/node.js-24.x-green?style=flat-square&logo=node.js)](https://nodejs.org/)
 
@@ -46,7 +47,7 @@ More engines, inputs, and samples: see [Usage Examples](#usage-examples) below. 
 
 ## Versioning (Marketplace)
 
-Latest release: **[v1.1.0](https://github.com/ale94lko/sql-optima/releases/tag/v1.1.0)** — see [CHANGELOG.md](CHANGELOG.md).
+Latest release: **[see GitHub Releases](https://github.com/ale94lko/sql-optima/releases/latest)** (always current) — notes in [CHANGELOG.md](CHANGELOG.md).
 
 Consumers should pin a floating major tag for convenience:
 
