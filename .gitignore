@@ -145,3 +145,5 @@ dist/*.wasm
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+sql-optima-report.md

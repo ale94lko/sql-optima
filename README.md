@@ -91,7 +91,8 @@ Live engines (`postgres` / `mysql` / `mssql` families) require an explicit [`db_
 
 | Output | Description |
 | :--- | :--- |
-| `report` | The full generated Markdown report containing static and dynamic findings. |
+| `report` | Compact Markdown report safe for Job Summary / Action outputs (large SQL embeds may be truncated). |
+| `report_path` | Workspace-relative path to the full Markdown report (`sql-optima-report.md`). Upload it as a workflow artifact for large schemas. |
 | `issue_count` | Total number of static + dynamic findings. |
 | `highest_severity` | Highest finding severity (`NONE`, `INFO`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`). |
 
