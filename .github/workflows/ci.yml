@@ -127,6 +127,119 @@ jobs:
           tar -xzf "$ARCHIVE" actionlint
           ./actionlint -color
 
+  # Default-path live engines (eval / merge-blocking). Per-engine jobs below stay as-is.
+  # Credentials are job env only (in-container services; no GitHub secrets / external DBs).
+  integration:
+    name: Integration (Postgres + MySQL + MSSQL)
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_DB: test_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      MYSQL_DATABASE: test_db
+      MYSQL_USER: root
+      MYSQL_ROOT_PASSWORD: root
+      # MSSQL image quirks: ACCEPT_EULA=Y is required or the container exits;
+      # SA password must meet complexity rules; host port is 1433; no reliable
+      # image HEALTHCHECK, so scripts/wait-for-mssql.js polls sa@master.
+      MSSQL_SA_PASSWORD: Your_strong_Password123
+      MSSQL_HOST: 127.0.0.1
+      MSSQL_PORT: '1433'
+      MSSQL_USER: sa
+      MSSQL_DATABASE: test_db
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: root
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: test_db
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: Your_strong_Password123
+        ports:
+          - 1433:1433
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare Postgres schema
+        run: psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f examples/seed_postgres.sql
+        env:
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+
+      - name: Prepare MySQL schema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
+          mysql -h 127.0.0.1 -u"$MYSQL_USER" -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" < examples/seed_mysql.sql
+
+      - name: Wait for SQL Server and create test_db
+        run: node scripts/wait-for-mssql.js
+
+      - name: Analyze mixed_postgres.sql against live Postgres
+        env:
+          INPUT_ENGINE: postgres
+          INPUT_SQL_FILE: examples/mixed_postgres.sql
+          INPUT_DB_HOST: localhost
+          INPUT_DB_PORT: '5432'
+          INPUT_DB_NAME: test_db
+          INPUT_DB_USER: postgres
+          INPUT_DB_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        run: node scripts/run-integration.js
+
+      - name: Analyze mixed_mysql.sql against live MySQL
+        env:
+          INPUT_ENGINE: mysql
+          INPUT_SQL_FILE: examples/mixed_mysql.sql
+          INPUT_DB_HOST: 127.0.0.1
+          INPUT_DB_PORT: '3306'
+          INPUT_DB_NAME: test_db
+          INPUT_DB_USER: root
+          INPUT_DB_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
+        run: node scripts/run-integration.js
+
+      - name: Analyze mixed_mssql.sql against live SQL Server
+        env:
+          INPUT_ENGINE: mssql
+          INPUT_SQL_FILE: examples/mixed_mssql.sql
+          INPUT_DB_HOST: 127.0.0.1
+          INPUT_DB_PORT: '1433'
+          INPUT_DB_NAME: test_db
+          INPUT_DB_USER: sa
+          INPUT_DB_PASSWORD: ${{ env.MSSQL_SA_PASSWORD }}
+        run: node scripts/run-integration.js
+
   integration-postgres:
     name: Integration (PostgreSQL)
     runs-on: ubuntu-latest
