@@ -122,6 +122,74 @@ describe('MssqlAnalyzer', () => {
     );
   });
 
+  it('flags MSSQL_CLUSTERED_INDEX_SCAN from SHOWPLAN clustered scans with high estimated rows', async () => {
+    const stmtText = 'SELECT * FROM orders WHERE status = 1';
+    request.query
+      .mockResolvedValueOnce({ recordset: [] }) // SET SHOWPLAN_ALL ON
+      .mockResolvedValueOnce({
+        recordset: [
+          {
+            PhysicalOp: 'Clustered Index Scan',
+            LogicalOp: 'Clustered Index Scan',
+            EstimateRows: 750,
+            StmtText: stmtText,
+            TotalSubtreeCost: 4.2,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ recordset: [] }); // SET SHOWPLAN_ALL OFF
+
+    const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
+    const result = await analyzer.analyzeQuery('SELECT * FROM orders WHERE status = 1;');
+
+    expect(result.executed).toBe(true);
+    expect(result.totalCost).toBe(4.2);
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]).toEqual({
+      type: 'MSSQL_CLUSTERED_INDEX_SCAN',
+      severity: 'MEDIUM',
+      message: `Clustered Index Scan with high estimated rows (750): ${stmtText}`,
+      suggestion:
+        'Consider a covering nonclustered index so the optimizer can use Index Seek instead of a full clustered scan.',
+    });
+  });
+
+  it('does not flag MSSQL_CLUSTERED_INDEX_SCAN when estimated rows are at most 500', () => {
+    const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
+    const issues = [];
+    analyzer.inspectPlanRow(
+      {
+        PhysicalOp: 'Clustered Index Scan',
+        EstimateRows: 500,
+        StmtText: 'SELECT * FROM orders',
+      },
+      issues,
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it('truncates StmtText in MSSQL_CLUSTERED_INDEX_SCAN messages to 120 characters', () => {
+    const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule });
+    const issues = [];
+    const stmtText = `SELECT ${'x'.repeat(200)}`;
+    analyzer.inspectPlanRow(
+      {
+        PhysicalOp: 'Clustered Index Scan',
+        EstimateRows: 501,
+        StmtText: stmtText,
+      },
+      issues,
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].type).toBe('MSSQL_CLUSTERED_INDEX_SCAN');
+    expect(issues[0].severity).toBe('MEDIUM');
+    expect(issues[0].message).toBe(
+      `Clustered Index Scan with high estimated rows (501): ${stmtText.slice(0, 120)}`,
+    );
+    expect(issues[0].message).not.toContain(stmtText.slice(120));
+  });
+
   it('returns an execution error when SHOWPLAN fails', async () => {
     request.query
       .mockResolvedValueOnce({ recordset: [] }) // SET ON
