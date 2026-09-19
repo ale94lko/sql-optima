@@ -260,7 +260,41 @@ describe('MySQLAnalyzer', () => {
     const result = await analyzer.analyzeQuery('SELECT * FROM missing;');
 
     expect(result.executed).toBe(false);
-    expect(result.issues[0].type).toBe('EXPLAIN_EXECUTION_ERROR');
+    expect(result.error).toBe('Failed to execute EXPLAIN: unknown table');
+    expect(result.issues).toEqual([
+      {
+        type: 'EXPLAIN_EXECUTION_ERROR',
+        severity: 'HIGH',
+        message: 'Database error during execution: unknown table',
+        suggestion:
+          'Ensure referenced tables/columns exist in the MySQL schema before running dynamic checks.',
+      },
+    ]);
+    expect(connection.release).toHaveBeenCalled();
+  });
+
+  it('skips inspectQueryBlock when EXPLAIN JSON has no query_block', async () => {
+    connection.query.mockResolvedValue([[{ EXPLAIN: { query_block: null } }]]);
+
+    const analyzer = new MySQLAnalyzer({}, { pool });
+    const result = await analyzer.analyzeQuery('SELECT 1;');
+
+    expect(result.executed).toBe(true);
+    expect(result.totalCost).toBeNull();
+    expect(result.issues).toEqual([]);
+    expect(result.rawPlan).toEqual({ query_block: null });
+  });
+
+  it('treats a missing EXPLAIN payload as a successful empty plan', async () => {
+    connection.query.mockResolvedValue([[{}]]);
+
+    const analyzer = new MySQLAnalyzer({}, { pool });
+    const result = await analyzer.analyzeQuery('SELECT 1;');
+
+    expect(result.executed).toBe(true);
+    expect(result.totalCost).toBeNull();
+    expect(result.issues).toEqual([]);
+    expect(result.rawPlan).toBeNull();
   });
 
   it('closes the pool', async () => {
@@ -274,14 +308,99 @@ describe('MySQLAnalyzer', () => {
     const analyzer = new MySQLAnalyzer({}, { pool });
     const issues = [];
     analyzer.inspectQueryBlock(null, issues);
+    analyzer.inspectQueryBlock({}, issues);
+    analyzer.inspectQueryBlock({ ordering_operation: {} }, issues);
+    analyzer.inspectQueryBlock({ nested_loop: [{}] }, issues);
     expect(issues).toEqual([]);
+  });
+
+  it('flags MYSQL_FILESORT from query_block ordering_operation', () => {
+    const analyzer = new MySQLAnalyzer({}, { pool });
+    const issues = [];
+    analyzer.inspectQueryBlock(
+      {
+        ordering_operation: {
+          using_filesort: true,
+        },
+      },
+      issues,
+    );
+
+    expect(issues).toEqual([
+      {
+        type: 'MYSQL_FILESORT',
+        severity: 'MEDIUM',
+        message: 'ORDER BY requires a filesort operation.',
+        suggestion:
+          'Consider adding an index covering the ORDER BY columns to avoid filesort overhead.',
+      },
+    ]);
+  });
+
+  it('inspects nested_loop tables and flags MISSING_INDEX_USAGE', () => {
+    const analyzer = new MySQLAnalyzer({}, { pool });
+    const issues = [];
+    analyzer.inspectQueryBlock(
+      {
+        nested_loop: [
+          {},
+          {
+            table: {
+              table_name: 'orders',
+              access_type: 'ref',
+            },
+          },
+        ],
+      },
+      issues,
+    );
+
+    expect(issues).toEqual([
+      {
+        type: 'MISSING_INDEX_USAGE',
+        severity: 'MEDIUM',
+        message: 'No index key was selected for table "orders".',
+        suggestion: 'Review table "orders" structure and create suitable indexes for filtering.',
+      },
+    ]);
   });
 
   it('uses unknown_table when table metadata is missing', () => {
     const analyzer = new MySQLAnalyzer({}, { pool });
     const issues = [];
     analyzer.inspectTableNode({ access_type: 'ALL', rows_examined_per_scan: 1 }, issues);
-    expect(issues[0].message).toContain('unknown_table');
+    expect(issues).toEqual([
+      {
+        type: 'FULL_TABLE_SCAN',
+        severity: 'MEDIUM',
+        message:
+          'Full Table Scan (access_type: ALL) on MySQL table "unknown_table" (Examined rows: 1).',
+        suggestion:
+          'Add an index on table "unknown_table" covering columns used in WHERE or JOIN predicates.',
+      },
+    ]);
+  });
+
+  it('does not flag MISSING_INDEX_USAGE when a key is selected', () => {
+    const analyzer = new MySQLAnalyzer({}, { pool });
+    const issues = [];
+    analyzer.inspectTableNode(
+      {
+        table_name: 'users',
+        access_type: 'ref',
+        key: 'idx_users_id',
+      },
+      issues,
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it('releases the connection when testConnection query fails', async () => {
+    connection.query.mockRejectedValue(new Error('timeout'));
+    const analyzer = new MySQLAnalyzer({}, { pool });
+
+    await expect(analyzer.testConnection()).rejects.toThrow('MySQL Connection Failed: timeout');
+    expect(connection.release).toHaveBeenCalled();
   });
 });
 
