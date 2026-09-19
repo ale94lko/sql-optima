@@ -92222,21 +92222,36 @@ const {
 } = __nccwpck_require__(25824);
 
 /**
+ * Build a cwd-relative path without `path.join(process.cwd(), literal…)` so ncc’s
+ * asset relocator cannot rewrite it into platform-specific `__nccwpck_require2_.ab`
+ * stubs (that made Build dist fail on Linux vs Windows).
+ * @param {string[]} parts
+ * @returns {string}
+ */
+function pathFromCwd(parts) {
+  let result = process.cwd();
+  for (const part of parts) {
+    result += path.sep + part;
+  }
+  return result;
+}
+
+/**
  * Resolve sql.js without a static `require('sql.js')` so ncc does not inline it.
- * Prefer `sql-wasm.js` next to the Action entry (`dist/`), then the package install.
+ * Prefer `sql-wasm.js` next to the Action entry (`dist/`), then cwd installs.
  * @returns {Function}
  */
 function loadInitSqlJs() {
+  const fileName = ['sql', '-wasm', '.js'].join('');
   const candidates = [
-    path.join(__dirname, 'sql-wasm.js'),
-    __nccwpck_require__.ab + "sql-wasm.js",
-    path.join(__dirname, '..', '..', 'dist', 'sql-wasm.js'),
+    path.join(__dirname, fileName),
+    pathFromCwd(['dist', fileName]),
+    pathFromCwd(['node_modules', 'sql.js', 'dist', fileName]),
   ];
 
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
       // Dynamic path keeps sql.js out of the ncc bundle (see scripts/copy-sqljs-wasm.js).
-      // eslint-disable-next-line import/no-dynamic-require, global-require
       return require(candidate);
     }
   }
@@ -92251,10 +92266,11 @@ function loadInitSqlJs() {
  * @returns {string|null}
  */
 function resolveWasmPath() {
+  const fileName = ['sql', '-wasm', '.wasm'].join('');
   const candidates = [
-    path.join(__dirname, 'sql-wasm.wasm'),
-    __nccwpck_require__.ab + "sql-wasm.wasm",
-    __nccwpck_require__.ab + "sql-wasm1.wasm",
+    path.join(__dirname, fileName),
+    pathFromCwd(['dist', fileName]),
+    pathFromCwd(['node_modules', 'sql.js', 'dist', fileName]),
   ];
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 }
