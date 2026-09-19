@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-19
+
+### Security
+
+- Constrain `sql_file` to `GITHUB_WORKSPACE` / cwd to prevent path traversal (CWE-22) ([#82](https://github.com/ale94lko/sql-optima/issues/82)).
+
 ## [1.1.0] - 2026-09-19
 
 ### Added
@@ -47,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Relicense to **MIT**.
 
-[Unreleased]: https://github.com/ale94lko/sql-optima/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/ale94lko/sql-optima/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/ale94lko/sql-optima/releases/tag/v1.1.1
 [1.1.0]: https://github.com/ale94lko/sql-optima/releases/tag/v1.1.0
 [1.0.0]: https://github.com/ale94lko/sql-optima/releases/tag/v1.0.0

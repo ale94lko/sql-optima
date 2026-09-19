@@ -139,6 +139,9 @@ describe('run', () => {
   });
 
   it('fails clearly when sql_file path does not exist', async () => {
+    const path = require('node:path');
+    const workspace = path.resolve('/tmp/sql-optima-ws');
+    const expected = path.resolve(workspace, 'missing.sql');
     const fs = {
       existsSync: vi.fn().mockReturnValue(false),
       readFileSync: vi.fn(),
@@ -148,21 +151,55 @@ describe('run', () => {
       if (name === 'sql_file') return 'missing.sql';
       return '';
     });
-
-    await run(deps({ fs }));
+    const prev = process.env.GITHUB_WORKSPACE;
+    process.env.GITHUB_WORKSPACE = workspace;
+    try {
+      await run(deps({ fs, path }));
+    } finally {
+      if (prev === undefined) delete process.env.GITHUB_WORKSPACE;
+      else process.env.GITHUB_WORKSPACE = prev;
+    }
 
     expect(core.setFailed).toHaveBeenCalledWith('SQL file not found: missing.sql');
+    expect(fs.existsSync).toHaveBeenCalledWith(expected);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(analyzeStaticSQL).not.toHaveBeenCalled();
+  });
+
+  it('rejects sql_file paths that escape the workspace', async () => {
+    const fs = {
+      existsSync: vi.fn(),
+      readFileSync: vi.fn(),
+    };
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'postgres';
+      if (name === 'sql_file') return '../outside.sql';
+      return '';
+    });
+    const prev = process.env.GITHUB_WORKSPACE;
+    process.env.GITHUB_WORKSPACE = require('node:path').resolve('/tmp/sql-optima-ws');
+    try {
+      await run(deps({ fs }));
+    } finally {
+      if (prev === undefined) delete process.env.GITHUB_WORKSPACE;
+      else process.env.GITHUB_WORKSPACE = prev;
+    }
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('sql_file must be inside the workspace'),
+    );
+    expect(fs.existsSync).not.toHaveBeenCalled();
     expect(fs.readFileSync).not.toHaveBeenCalled();
     expect(analyzeStaticSQL).not.toHaveBeenCalled();
   });
 
   it('prefers sql_file over sql_content and repository_dispatch payload', async () => {
+    const path = require('node:path');
+    const workspace = path.resolve('/tmp/sql-optima-ws');
+    const expected = path.resolve(workspace, 'examples/mixed_postgres.sql');
     const fs = {
-      existsSync: vi.fn().mockReturnValue(true),
+      existsSync: vi.fn((p) => p === expected),
       readFileSync: vi.fn().mockReturnValue('SELECT id FROM file_table;'),
-    };
-    const path = {
-      resolve: vi.fn((p) => `/workspace/${p}`),
     };
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'postgres';
@@ -176,11 +213,16 @@ describe('run', () => {
         sql_code: 'SELECT id FROM payload_table;',
       },
     };
+    const prev = process.env.GITHUB_WORKSPACE;
+    process.env.GITHUB_WORKSPACE = workspace;
+    try {
+      await run(deps({ fs, path }));
+    } finally {
+      if (prev === undefined) delete process.env.GITHUB_WORKSPACE;
+      else process.env.GITHUB_WORKSPACE = prev;
+    }
 
-    await run(deps({ fs, path }));
-
-    expect(path.resolve).toHaveBeenCalledWith('examples/mixed_postgres.sql');
-    expect(fs.readFileSync).toHaveBeenCalledWith('/workspace/examples/mixed_postgres.sql', 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expected, 'utf8');
     expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM file_table;', 'postgres');
   });
 

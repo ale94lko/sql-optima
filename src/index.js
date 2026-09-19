@@ -24,7 +24,7 @@ async function run(overrides = {}) {
   const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword, splitStatements } =
     sqlUtils;
   const inputValidation = overrides.inputValidation || require('./inputValidation');
-  const { validateActionInputs } = inputValidation;
+  const { validateActionInputs, resolveSqlFileWithinWorkspace } = inputValidation;
   const severityGate = overrides.severityGate || require('./severityGate');
   const { evaluateSeverityGate } = severityGate;
   const { createLogger } = overrides.loggerModule || require('./logger');
@@ -59,7 +59,15 @@ async function run(overrides = {}) {
     // 3. Resolve SQL source: sql_file > sql_content > repository_dispatch payload
     let sqlContent = '';
     if (sqlFile) {
-      const resolvedPath = path.resolve(sqlFile);
+      const pathCheck = resolveSqlFileWithinWorkspace(sqlFile, {
+        pathModule: path,
+        workspaceRoot: process.env.GITHUB_WORKSPACE || process.cwd(),
+      });
+      if (!pathCheck.ok) {
+        core.setFailed(pathCheck.error);
+        return;
+      }
+      const resolvedPath = pathCheck.resolvedPath;
       if (!fs.existsSync(resolvedPath)) {
         core.setFailed(`SQL file not found: ${sqlFile}`);
         return;

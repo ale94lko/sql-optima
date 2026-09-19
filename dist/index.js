@@ -92683,7 +92683,7 @@ async function run(overrides = {}) {
   const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword, splitStatements } =
     sqlUtils;
   const inputValidation = overrides.inputValidation || __nccwpck_require__(16342);
-  const { validateActionInputs } = inputValidation;
+  const { validateActionInputs, resolveSqlFileWithinWorkspace } = inputValidation;
   const severityGate = overrides.severityGate || __nccwpck_require__(59781);
   const { evaluateSeverityGate } = severityGate;
   const { createLogger } = overrides.loggerModule || __nccwpck_require__(78033);
@@ -92718,7 +92718,15 @@ async function run(overrides = {}) {
     // 3. Resolve SQL source: sql_file > sql_content > repository_dispatch payload
     let sqlContent = '';
     if (sqlFile) {
-      const resolvedPath = path.resolve(sqlFile);
+      const pathCheck = resolveSqlFileWithinWorkspace(sqlFile, {
+        pathModule: path,
+        workspaceRoot: process.env.GITHUB_WORKSPACE || process.cwd(),
+      });
+      if (!pathCheck.ok) {
+        core.setFailed(pathCheck.error);
+        return;
+      }
+      const resolvedPath = pathCheck.resolvedPath;
       if (!fs.existsSync(resolvedPath)) {
         core.setFailed(`SQL file not found: ${sqlFile}`);
         return;
@@ -92928,7 +92936,7 @@ if (require.main === require.cache[eval('__filename')]) {
 /***/ }),
 
 /***/ 16342:
-/***/ ((module) => {
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 /**
  * Copyright (c) 2026 sql-optima contributors
@@ -93035,12 +93043,42 @@ function validateActionInputs(inputs = {}) {
   return { ok: true, engine: engineResult.engine, port: portResult.port };
 }
 
+/**
+ * Resolves `sql_file` and ensures it stays inside the Action workspace (CWE-22).
+ *
+ * @param {string} sqlFile
+ * @param {Object} [options]
+ * @param {string} [options.workspaceRoot] - Defaults to GITHUB_WORKSPACE or cwd.
+ * @param {typeof import('path')} [options.pathModule] - Injected path module for tests.
+ * @returns {{ ok: true, resolvedPath: string, workspaceRoot: string } | { ok: false, error: string }}
+ */
+function resolveSqlFileWithinWorkspace(sqlFile, options = {}) {
+  const pathMod = options.pathModule || __nccwpck_require__(16928);
+  const rawRoot =
+    options.workspaceRoot !== undefined && options.workspaceRoot !== null
+      ? options.workspaceRoot
+      : process.env.GITHUB_WORKSPACE || process.cwd();
+  const workspaceRoot = pathMod.resolve(String(rawRoot));
+  const resolvedPath = pathMod.resolve(workspaceRoot, String(sqlFile || ''));
+  const relative = pathMod.relative(workspaceRoot, resolvedPath);
+
+  if (relative.startsWith('..') || pathMod.isAbsolute(relative)) {
+    return {
+      ok: false,
+      error: `sql_file must be inside the workspace: ${sqlFile}`,
+    };
+  }
+
+  return { ok: true, resolvedPath, workspaceRoot };
+}
+
 module.exports = {
   ALLOWED_ENGINES,
   normalizeEngine,
   validateEngine,
   validateDbPort,
   validateActionInputs,
+  resolveSqlFileWithinWorkspace,
 };
 
 
