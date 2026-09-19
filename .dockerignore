@@ -1,0 +1,12 @@
+# Keep the image build context small. Dockerfile copies only package files, src/, scripts/, and examples/.
+.git
+.github
+node_modules
+coverage
+dist
+assets
+docs
+.env
+.env.*
+*.md
+!README.md
