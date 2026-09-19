@@ -82,5 +82,17 @@ describe('SqliteAnalyzer', () => {
     await analyzer.close();
     expect(close).toHaveBeenCalled();
   });
+
+  it('loads real sql.js from node_modules when initSqlJs is not injected', async () => {
+    const analyzer = new SqliteAnalyzer({});
+    await expect(analyzer.testConnection()).resolves.toBe(true);
+    expect(analyzer.db).toBeTruthy();
+    const result = await analyzer.analyzeQuery(`
+      CREATE TABLE t (id INTEGER PRIMARY KEY);
+      SELECT id FROM t;
+    `);
+    expect(result.executed).toBe(true);
+    await analyzer.close();
+  });
 });
 

@@ -72,7 +72,9 @@ npm run build
 
 After changing `src/` or lockfile dependencies, commit the rebuilt `dist/` JS bundle in the same change. Consumers run the Action from `dist/index.js` without installing npm dependencies on their runners. CI fails if tracked `dist/` files are stale (`git diff --exit-code dist` in the build job).
 
-`dist/sql-wasm.wasm` is **generated** by `npm run build` (copied from `sql.js`) and is gitignored on `main` to keep OpenSSF Scorecard Binary-Artifacts clean. The release workflow force-adds the wasm onto version tags so `uses: ale94lko/sql-optima@v1` still ships a complete Action. Local/CI jobs that use `uses: ./` must run `npm run build` first (integration jobs already do).
+`dist/sql-wasm.js` and `dist/sql-wasm.wasm` are **generated** by `npm run build` (copied from `sql.js`) and are gitignored on `main` to keep OpenSSF Scorecard Binary-Artifacts clean. The release workflow force-adds both onto version tags so `uses: ale94lko/sql-optima@v1` still ships a complete Action. Local/CI jobs that use `uses: ./` must run `npm run build` first (integration jobs already do).
+
+sql.js is intentionally **not** inlined into `dist/index.js` (ncc + Emscripten breaks with `Cannot set properties of undefined (setting 'exports')` under Node 24).
 
 ## Continuous integration
 

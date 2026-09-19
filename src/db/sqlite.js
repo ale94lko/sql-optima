@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: MIT
  */
 
-const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 const {
@@ -11,6 +10,44 @@ const {
   extractSchemaStatements,
   stripLeadingComments,
 } = require('../sqlUtils');
+
+/**
+ * Resolve sql.js without a static `require('sql.js')` so ncc does not inline it.
+ * Prefer `sql-wasm.js` next to the Action entry (`dist/`), then the package install.
+ * @returns {Function}
+ */
+function loadInitSqlJs() {
+  const candidates = [
+    path.join(__dirname, 'sql-wasm.js'),
+    path.join(__dirname, '..', '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.js'),
+    path.join(__dirname, '..', '..', 'dist', 'sql-wasm.js'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      // Dynamic path keeps sql.js out of the ncc bundle (see scripts/copy-sqljs-wasm.js).
+      // eslint-disable-next-line import/no-dynamic-require, global-require
+      return require(candidate);
+    }
+  }
+
+  throw new Error(
+    'sql.js runtime not found (sql-wasm.js). Run `npm run build` (or `npm install`) so the Action can load SQLite.',
+  );
+}
+
+/**
+ * Prefer a wasm binary next to the loader / Action entry.
+ * @returns {string|null}
+ */
+function resolveWasmPath() {
+  const candidates = [
+    path.join(__dirname, 'sql-wasm.wasm'),
+    path.join(__dirname, '..', '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'),
+    path.join(__dirname, '..', '..', 'dist', 'sql-wasm.wasm'),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
 
 /**
  * SQLite analyzer using an in-memory sql.js database.
@@ -26,7 +63,7 @@ class SqliteAnalyzer {
   constructor(config = {}, dependencies = {}) {
     this.config = config;
     this.logger = dependencies.logger || null;
-    this.initSqlJs = dependencies.initSqlJs || initSqlJs;
+    this.initSqlJs = dependencies.initSqlJs || null;
     this.db = null;
     this.SQL = null;
   }
@@ -52,12 +89,13 @@ class SqliteAnalyzer {
       phase: 'connect',
     });
     const options = {};
-    const wasmPath = path.join(__dirname, 'sql-wasm.wasm');
-    if (fs.existsSync(wasmPath)) {
+    const wasmPath = resolveWasmPath();
+    if (wasmPath) {
       options.wasmBinary = fs.readFileSync(wasmPath);
     }
 
-    this.SQL = await this.initSqlJs(options);
+    const initSqlJs = this.initSqlJs || loadInitSqlJs();
+    this.SQL = await initSqlJs(options);
     this.db = new this.SQL.Database();
     this.db.run('SELECT 1;');
     return true;

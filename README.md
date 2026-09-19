@@ -439,7 +439,7 @@ npm test
 npm run test:coverage   # fails the process (and CI `unit`) if floors in vitest.config.js are unmet
 
 # Compile source files into dist/index.js (commit dist/ JS when src/ or deps change).
-# dist/sql-wasm.wasm is generated here and gitignored on main; release tags ship it.
+# dist/sql-wasm.js + sql-wasm.wasm are generated here and gitignored on main; release tags ship them.
 npm run build
 ```
 

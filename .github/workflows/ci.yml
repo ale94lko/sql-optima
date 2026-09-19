@@ -51,7 +51,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: coverage-unit
           path: |
@@ -81,8 +81,8 @@ jobs:
           # Ignore executable-bit noise on copied binaries across hosts.
           git config core.fileMode false
           npm run build
-          if [ ! -f dist/sql-wasm.wasm ]; then
-            echo "::error::dist/sql-wasm.wasm was not generated. Check scripts/copy-sqljs-wasm.js."
+          if [ ! -f dist/sql-wasm.wasm ] || [ ! -f dist/sql-wasm.js ]; then
+            echo "::error::dist/sql-wasm.js / sql-wasm.wasm were not generated. Check scripts/copy-sqljs-wasm.js."
             exit 1
           fi
           if ! git diff --exit-code -- dist; then
