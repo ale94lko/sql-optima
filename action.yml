@@ -46,7 +46,9 @@ inputs:
 
 outputs:
   report:
-    description: 'Generated Markdown report containing optimization suggestions'
+    description: 'Compact Markdown report (safe for Job Summary / Action outputs; large SQL embeds may be truncated)'
+  report_path:
+    description: 'Workspace-relative path to the full Markdown report file (sql-optima-report.md)'
   issue_count:
     description: 'Total number of static + dynamic findings'
   highest_severity:

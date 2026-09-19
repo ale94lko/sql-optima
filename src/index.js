@@ -208,18 +208,46 @@ async function run(overrides = {}) {
       log.info(dynamicResult.reason, { engine, phase: 'dynamic', executed: false });
     }
 
-    // 8. Generate Markdown Report
+    // 8. Generate Markdown Report (compact for Step Summary; full for file / output)
     log.info('Generating markdown summary report', { engine, phase: 'report' });
-    const markdownReport = generateMarkdownReport({
+    const summaryReport = generateMarkdownReport({
       engine,
       sqlContent,
       staticIssues,
       dynamicResult,
     });
+    const fullReport = generateMarkdownReport({
+      engine,
+      sqlContent,
+      staticIssues,
+      dynamicResult,
+      embedLimits: null,
+    });
+
+    const workspaceRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+    const reportPath = path.join(workspaceRoot, 'sql-optima-report.md');
+    fs.writeFileSync(reportPath, fullReport, 'utf8');
+    log.info('Wrote full markdown report', {
+      engine,
+      phase: 'report',
+      reportPath: 'sql-optima-report.md',
+      summaryBytes: Buffer.byteLength(summaryReport, 'utf8'),
+      fullBytes: Buffer.byteLength(fullReport, 'utf8'),
+    });
 
     // 9. Output to GitHub Step Summary ($GITHUB_STEP_SUMMARY) and Action Outputs
-    await core.summary.addRaw(markdownReport).write();
-    core.setOutput('report', markdownReport);
+    try {
+      await core.summary.addRaw(summaryReport).write();
+    } catch (summaryError) {
+      log.warn('Failed to write GitHub Step Summary; full report is in sql-optima-report.md', {
+        engine,
+        phase: 'report',
+        error: summaryError.message,
+      });
+    }
+    // Keep the Action output compact — large scripts exceed GitHub output limits.
+    core.setOutput('report', summaryReport);
+    core.setOutput('report_path', 'sql-optima-report.md');
 
     const allIssues = [
       ...staticIssues,

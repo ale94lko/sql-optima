@@ -126,5 +126,28 @@ describe('generateMarkdownReport', () => {
 
     expect(report).toContain('N/A');
   });
+
+  it('truncates large SQL embeds in the default summary report', () => {
+    const hugeSql = `${'SELECT 1;\n'.repeat(8_000)}-- end`;
+    const summary = generateMarkdownReport({
+      engine: 'mysql',
+      sqlContent: hugeSql,
+      staticIssues: [],
+      dynamicResult: { executed: false, issues: [] },
+    });
+    const full = generateMarkdownReport({
+      engine: 'mysql',
+      sqlContent: hugeSql,
+      staticIssues: [],
+      dynamicResult: { executed: false, issues: [] },
+      embedLimits: null,
+    });
+
+    expect(summary).toContain('(truncated)');
+    expect(summary).toContain('sql-optima-report.md');
+    expect(summary.length).toBeLessThan(hugeSql.length);
+    expect(full).toContain('-- end');
+    expect(full).not.toContain('(truncated)');
+  });
 });
 

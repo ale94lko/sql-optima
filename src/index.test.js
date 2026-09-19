@@ -449,14 +449,18 @@ describe('run', () => {
     expect(PostgresAnalyzer).not.toHaveBeenCalled();
   });
 
-  it('marks the action as failed when summary writing throws', async () => {
+  it('continues when summary writing throws and still writes the report file', async () => {
     core.summary.addRaw.mockReturnValue({
       write: vi.fn().mockRejectedValue(new Error('summary failed')),
     });
 
     await run(deps());
 
-    expect(core.setFailed).toHaveBeenCalledWith('SQL Optima Action failed: summary failed');
+    expect(core.setFailed).not.toHaveBeenCalled();
+    expect(core.setOutput).toHaveBeenCalledWith('report_path', 'sql-optima-report.md');
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to write GitHub Step Summary'),
+    );
     expect(postgresAnalyzer.close).toHaveBeenCalled();
   });
 
