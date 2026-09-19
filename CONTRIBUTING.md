@@ -88,7 +88,7 @@ PR and `main` pushes run [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 
 Security / supply-chain (separate workflows):
 
-- GitHub **CodeQL** default code scanning (config: [`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml); avoids conflicting with an advanced workflow)
+- GitHub **CodeQL** advanced setup ([`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) + [`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml)). The config excludes `dist/**` (ncc bundle) so CodeQL does not try to parse generated JS. Prefer advanced setup over default setup on this repo so `paths-ignore` is always applied.
 - [`.github/workflows/scorecard.yml`](.github/workflows/scorecard.yml) — OpenSSF Scorecard
 
 Tag releases stay on [`.github/workflows/release.yml`](.github/workflows/release.yml) (`contents: write` only on that job). Pushing `vX.Y.Z` creates the GitHub Release and moves the major floating tag (`vX`) for Marketplace consumers (`uses: ale94lko/sql-optima@v1`). Manual / API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml) (`repository_dispatch` / `workflow_dispatch` only). Do **not** hardcode the latest semver in README / docs — link [releases/latest](https://github.com/ale94lko/sql-optima/releases/latest) (and update [CHANGELOG.md](CHANGELOG.md) only).
