@@ -182,9 +182,52 @@ describe('MySQLAnalyzer', () => {
     `);
 
     expect(result.executed).toBe(true);
-    expect(result.issues.map((i) => i.type)).toEqual(
-      expect.arrayContaining(['SCHEMA_APPLY_ERROR', 'FULL_TABLE_SCAN']),
+    expect(result.issues.find((issue) => issue.type === 'SCHEMA_APPLY_ERROR')).toEqual({
+      type: 'SCHEMA_APPLY_ERROR',
+      severity: 'MEDIUM',
+      message: 'Failed to apply schema statement before EXPLAIN: syntax error',
+      suggestion:
+        'Ensure CREATE/INSERT statements are valid for MySQL/MariaDB, or pre-seed the database.',
+    });
+    expect(result.issues.find((issue) => issue.type === 'FULL_TABLE_SCAN')).toEqual(
+      expect.objectContaining({
+        type: 'FULL_TABLE_SCAN',
+        severity: 'MEDIUM',
+        message: expect.stringContaining('"tiny"'),
+      }),
     );
+  });
+
+  it('keeps SCHEMA_APPLY_ERROR when EXPLAIN fails after a schema apply error', async () => {
+    connection.query
+      .mockRejectedValueOnce(new Error('syntax error'))
+      .mockRejectedValueOnce(new Error('unknown table'));
+
+    const analyzer = new MySQLAnalyzer({}, { pool });
+    const result = await analyzer.analyzeQuery(`
+      CREATE TABLE bad (id INT;
+      SELECT * FROM missing;
+    `);
+
+    expect(result.executed).toBe(false);
+    expect(result.error).toBe('Failed to execute EXPLAIN: unknown table');
+    expect(result.issues).toEqual([
+      {
+        type: 'SCHEMA_APPLY_ERROR',
+        severity: 'MEDIUM',
+        message: 'Failed to apply schema statement before EXPLAIN: syntax error',
+        suggestion:
+          'Ensure CREATE/INSERT statements are valid for MySQL/MariaDB, or pre-seed the database.',
+      },
+      {
+        type: 'EXPLAIN_EXECUTION_ERROR',
+        severity: 'HIGH',
+        message: 'Database error during execution: unknown table',
+        suggestion:
+          'Ensure referenced tables/columns exist in the MySQL schema before running dynamic checks.',
+      },
+    ]);
+    expect(connection.release).toHaveBeenCalled();
   });
 
   it('parses object EXPLAIN payloads and uses medium severity for small scans', async () => {
