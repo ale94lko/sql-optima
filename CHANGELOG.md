@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-09-19
+
 ### Added
 
 - `SYNTAX_ERROR` findings include `line` / `column` / `location`, optional `source` (`sql_file`), and a ±2-line SQL context `snippet` in the Markdown report ([#87](https://github.com/ale94lko/sql-optima/issues/87)).
@@ -63,7 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Relicense to **MIT**.
 
-[Unreleased]: https://github.com/ale94lko/sql-optima/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/ale94lko/sql-optima/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/ale94lko/sql-optima/releases/tag/v1.1.3
 [1.1.2]: https://github.com/ale94lko/sql-optima/releases/tag/v1.1.2
 [1.1.1]: https://github.com/ale94lko/sql-optima/releases/tag/v1.1.1
 [1.1.0]: https://github.com/ale94lko/sql-optima/releases/tag/v1.1.0
