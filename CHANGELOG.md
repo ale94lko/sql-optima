@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-09-19
+
 ### Fixed
 
 - Keep Job Summary under GitHub’s 1024 KiB limit by truncating large SQL/EXPLAIN embeds; write the full report to `sql-optima-report.md` and expose `report_path` ([#84](https://github.com/ale94lko/sql-optima/issues/84)).
@@ -57,7 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Relicense to **MIT**.
 
-[Unreleased]: https://github.com/ale94lko/sql-optima/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/ale94lko/sql-optima/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/ale94lko/sql-optima/releases/tag/v1.1.2
 [1.1.1]: https://github.com/ale94lko/sql-optima/releases/tag/v1.1.1
 [1.1.0]: https://github.com/ale94lko/sql-optima/releases/tag/v1.1.0
 [1.0.0]: https://github.com/ale94lko/sql-optima/releases/tag/v1.0.0
