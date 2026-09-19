@@ -91,7 +91,7 @@ Security / supply-chain (separate workflows):
 - GitHub **CodeQL** default code scanning (config: [`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml); avoids conflicting with an advanced workflow)
 - [`.github/workflows/scorecard.yml`](.github/workflows/scorecard.yml) — OpenSSF Scorecard
 
-Tag releases stay on [`.github/workflows/release.yml`](.github/workflows/release.yml) (`contents: write` only on that job). Pushing `vX.Y.Z` creates the GitHub Release and moves the major floating tag (`vX`) for Marketplace consumers (`uses: ale94lko/sql-optima@v1`). Manual / API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml) (`repository_dispatch` / `workflow_dispatch` only).
+Tag releases stay on [`.github/workflows/release.yml`](.github/workflows/release.yml) (`contents: write` only on that job). Pushing `vX.Y.Z` creates the GitHub Release and moves the major floating tag (`vX`) for Marketplace consumers (`uses: ale94lko/sql-optima@v1`). Manual / API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml) (`repository_dispatch` / `workflow_dispatch` only). Do **not** hardcode the latest semver in README / docs — link [releases/latest](https://github.com/ale94lko/sql-optima/releases/latest) (and update [CHANGELOG.md](CHANGELOG.md) only).
 
 Workflows use least-privilege `permissions:` and SHA-pinned Actions with `# vX.Y.Z` comments.
 
