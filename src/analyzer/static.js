@@ -35,7 +35,7 @@ function analyzeStaticSQL(sqlContent, engine = 'postgres', options = {}) {
       switch (stmt.type) {
         case 'create':
           if (stmt.keyword === 'table') {
-            analyzeCreateTable(stmt, issues);
+            analyzeCreateTable(stmt, issues, engine);
           }
           break;
 
@@ -170,11 +170,161 @@ function getColumnName(column) {
 }
 
 /**
- * Inspects CREATE TABLE statements for structural best practices.
+ * Returns whether the engine is MySQL / MariaDB (or Aurora MySQL).
+ * @param {string} engine
+ * @returns {boolean}
  */
-function analyzeCreateTable(stmt, issues) {
+function isMysqlFamilyEngine(engine) {
+  const normalized = String(engine || '')
+    .toLowerCase()
+    .replace(/_/g, '-');
+  return (
+    normalized === 'mysql' ||
+    normalized === 'mariadb' ||
+    normalized === 'aurora-mysql' ||
+    normalized.endsWith('-mysql') ||
+    normalized.includes('mariadb')
+  );
+}
+
+/**
+ * Resolves the storage engine from CREATE TABLE options.
+ * MySQL/MariaDB default to InnoDB when ENGINE is omitted.
+ * @param {object} stmt
+ * @param {string} engine
+ * @returns {string|null} Lowercase engine name, or null when not MySQL-family.
+ */
+function resolveMysqlStorageEngine(stmt, engine) {
+  if (!isMysqlFamilyEngine(engine)) {
+    return null;
+  }
+
+  const options = Array.isArray(stmt.table_options) ? stmt.table_options : [];
+  const engineOption = options.find(
+    (opt) => typeof opt?.keyword === 'string' && opt.keyword.toLowerCase() === 'engine',
+  );
+
+  if (!engineOption || engineOption.value == null || engineOption.value === '') {
+    return 'innodb';
+  }
+
+  return String(engineOption.value).toLowerCase();
+}
+
+/**
+ * True when MySQL/MariaDB InnoDB will auto-create indexes for FOREIGN KEY columns.
+ * @param {object} stmt
+ * @param {string} engine
+ * @returns {boolean}
+ */
+function innodbAutoIndexesForeignKeys(stmt, engine) {
+  return resolveMysqlStorageEngine(stmt, engine) === 'innodb';
+}
+
+/**
+ * Extracts ordered column names from an index / key / PK / UNIQUE definition.
+ * @param {unknown} definition
+ * @returns {string[]}
+ */
+function getIndexColumnNames(definition) {
+  if (!Array.isArray(definition)) {
+    return [];
+  }
+  return definition
+    .map((col) => getColumnName(col) || getColumnName(col?.column))
+    .filter((name) => typeof name === 'string' && name.length > 0)
+    .map((name) => name.toLowerCase());
+}
+
+/**
+ * Collects index column prefixes declared in the same CREATE TABLE.
+ * An index covers an FK when the FK columns are a leftmost prefix of the index.
+ * @param {object[]} definitions
+ * @returns {string[][]}
+ */
+function collectIndexColumnPrefixes(definitions) {
+  /** @type {string[][]} */
+  const prefixes = [];
+
+  definitions.forEach((def) => {
+    if (def.resource === 'index') {
+      const cols = getIndexColumnNames(def.definition);
+      if (cols.length > 0) {
+        prefixes.push(cols);
+      }
+      return;
+    }
+
+    if (def.resource === 'constraint') {
+      const constraintType = String(def.constraint_type || '').toLowerCase();
+      if (
+        constraintType === 'primary key' ||
+        constraintType === 'unique' ||
+        constraintType === 'unique key' ||
+        constraintType === 'unique index'
+      ) {
+        const cols = getIndexColumnNames(def.definition);
+        if (cols.length > 0) {
+          prefixes.push(cols);
+        }
+      }
+      return;
+    }
+
+    if (def.resource === 'column') {
+      const columnName = getColumnName(def.column);
+      if (!columnName) {
+        return;
+      }
+      const normalized = columnName.toLowerCase();
+
+      if (typeof def.primary_key === 'string' && def.primary_key.toLowerCase().includes('primary')) {
+        prefixes.push([normalized]);
+      }
+
+      if (typeof def.unique === 'string' && def.unique.toLowerCase().includes('unique')) {
+        prefixes.push([normalized]);
+      }
+
+      const hasPkConstraint = def.definition?.constraints?.some(
+        (c) => c.constraint_type?.toLowerCase() === 'primary key',
+      );
+      if (hasPkConstraint) {
+        prefixes.push([normalized]);
+      }
+    }
+  });
+
+  return prefixes;
+}
+
+/**
+ * @param {string[]} fkColumns lowercase FK column names in order
+ * @param {string[][]} indexPrefixes
+ * @returns {boolean}
+ */
+function indexCoversForeignKey(fkColumns, indexPrefixes) {
+  if (fkColumns.length === 0) {
+    return false;
+  }
+  return indexPrefixes.some(
+    (prefix) =>
+      prefix.length >= fkColumns.length &&
+      fkColumns.every((column, index) => prefix[index] === column),
+  );
+}
+
+/**
+ * Inspects CREATE TABLE statements for structural best practices.
+ * @param {object} stmt
+ * @param {object[]} issues
+ * @param {string} engine
+ */
+function analyzeCreateTable(stmt, issues, engine = 'postgres') {
   const tableName = stmt.table[0]?.table || 'unknown_table';
   const definitions = stmt.create_definitions || [];
+  const indexPrefixes = collectIndexColumnPrefixes(definitions);
+  const skipUnindexedFkForInnoDb = innodbAutoIndexesForeignKeys(stmt, engine);
 
   let hasPrimaryKey = false;
   const foreignKeysWithoutIndex = [];
@@ -198,12 +348,18 @@ function analyzeCreateTable(stmt, issues) {
       }
     }
 
-    // 2. Identify Foreign Key references to suggest indexing
+    // 2. Identify Foreign Key references that still need an explicit index
     if (def.resource === 'constraint' && def.constraint_type === 'FOREIGN KEY') {
-      const fkColumns = (def.definition || [])
-        .map((col) => getColumnName(col) || getColumnName(col?.column))
-        .filter(Boolean);
-      if (fkColumns.length > 0) {
+      if (skipUnindexedFkForInnoDb) {
+        return;
+      }
+
+      const fkColumns = getIndexColumnNames(def.definition);
+      if (fkColumns.length === 0) {
+        return;
+      }
+
+      if (!indexCoversForeignKey(fkColumns, indexPrefixes)) {
         foreignKeysWithoutIndex.push(fkColumns.join(', '));
       }
     }

@@ -128,7 +128,7 @@ Checked-in fixtures under [`examples/`](examples/) intentionally trigger the fin
 | Issue type | Severity | Why it fires | Suggested fix |
 | :--- | :--- | :--- | :--- |
 | `MISSING_PRIMARY_KEY` | HIGH | `products` has no `PRIMARY KEY` | Add an `id` (or natural) primary key |
-| `UNINDEXED_FOREIGN_KEY` | MEDIUM | `order_items.order_id` is a FK without an explicit index | `CREATE INDEX` on the FK column(s) |
+| `UNINDEXED_FOREIGN_KEY` | MEDIUM | `order_items.order_id` is a FK without an explicit index (skipped for MySQL/MariaDB **InnoDB**, which auto-indexes FKs; also skipped when a same-table `KEY`/`INDEX`/`UNIQUE` already covers the FK columns) | `CREATE INDEX` on the FK column(s) |
 | `WILDCARD_SELECT` | LOW | `SELECT * FROM orders …` | Project only required columns |
 | `LEADING_WILDCARD_LIKE` | MEDIUM | `email LIKE '%example.com'` | Avoid leading `%`, or use trigram/full-text search |
 | `FILTER_COLUMN_INDEX_CANDIDATE` | INFO | Columns used in `WHERE` | Consider indexes on hot filter columns |

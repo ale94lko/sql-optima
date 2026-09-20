@@ -60,6 +60,115 @@ describe('analyzeStaticSQL', () => {
     );
   });
 
+  it('does not flag foreign keys that already have an explicit KEY', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE orders (
+        id INT PRIMARY KEY,
+        user_id INT,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        KEY idx_orders_user_id (user_id)
+      );
+    `,
+      'postgres',
+    );
+
+    expect(issues.find((issue) => issue.type === 'UNINDEXED_FOREIGN_KEY')).toBeUndefined();
+  });
+
+  it('does not flag foreign keys covered by a composite index leftmost prefix', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE order_items (
+        id INT PRIMARY KEY,
+        order_id INT,
+        product_id INT,
+        FOREIGN KEY (order_id) REFERENCES orders(id),
+        KEY idx_order_product (order_id, product_id)
+      );
+    `,
+      'postgres',
+    );
+
+    expect(issues.find((issue) => issue.type === 'UNINDEXED_FOREIGN_KEY')).toBeUndefined();
+  });
+
+  it('does not flag MySQL InnoDB foreign keys (engine auto-creates indexes)', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE active_tokens (
+        id INT PRIMARY KEY,
+        user_id INT,
+        tenant_id INT,
+        token VARCHAR(255),
+        token_type VARCHAR(50),
+        family_id VARCHAR(50),
+        CONSTRAINT active_tokens_fk_user FOREIGN KEY (user_id) REFERENCES tenant_users (id) ON DELETE CASCADE,
+        CONSTRAINT active_tokens_ibfk_1 FOREIGN KEY (tenant_id) REFERENCES tenants (id),
+        KEY active_tokens_idx_user_id (user_id),
+        KEY active_tokens_idx_tenant_type_token (tenant_id, token_type, token),
+        KEY active_tokens_idx_family (tenant_id, family_id)
+      ) ENGINE=InnoDB;
+    `,
+      'mysql',
+    );
+
+    expect(issues.find((issue) => issue.type === 'UNINDEXED_FOREIGN_KEY')).toBeUndefined();
+  });
+
+  it('does not flag MySQL foreign keys when ENGINE is omitted (defaults to InnoDB)', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE orders (
+        id INT PRIMARY KEY,
+        user_id INT,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+    `,
+      'mysql',
+    );
+
+    expect(issues.find((issue) => issue.type === 'UNINDEXED_FOREIGN_KEY')).toBeUndefined();
+  });
+
+  it('still flags unindexed foreign keys on MySQL MyISAM', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE orders (
+        id INT PRIMARY KEY,
+        user_id INT,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      ) ENGINE=MyISAM;
+    `,
+      'mysql',
+    );
+
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'UNINDEXED_FOREIGN_KEY',
+          message: expect.stringContaining('user_id'),
+        }),
+      ]),
+    );
+  });
+
+  it('does not flag MyISAM foreign keys when an explicit index already covers them', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE orders (
+        id INT PRIMARY KEY,
+        user_id INT,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        KEY idx_user (user_id)
+      ) ENGINE=MyISAM;
+    `,
+      'mysql',
+    );
+
+    expect(issues.find((issue) => issue.type === 'UNINDEXED_FOREIGN_KEY')).toBeUndefined();
+  });
+
   it('flags SELECT * queries', () => {
     const issues = analyzeStaticSQL('SELECT * FROM users;');
 

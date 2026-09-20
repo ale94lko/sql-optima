@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - SQLite dynamic analysis under the Action bundle: load `sql-wasm.js` beside `dist/` instead of inlining `sql.js` via ncc (avoids `Cannot set properties of undefined (setting 'exports')` on Node 24).
 - CI: bump `actions/upload-artifact` to v6 (Node.js 24 runtime) to clear the Node 20 deprecation warning.
+- Suppress false-positive `UNINDEXED_FOREIGN_KEY` for MySQL/MariaDB InnoDB (engine auto-creates FK indexes) and when an explicit same-table index already covers the FK columns ([#100](https://github.com/ale94lko/sql-optima/issues/100)).
 
 ## [1.1.3] - 2026-09-19
 
