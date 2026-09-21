@@ -64,7 +64,7 @@ function formatLogLine(level, message, fields) {
  * Create a leveled logger.
  *
  * @param {Object} [options]
- * @param {Pick<import('@actions/core'), 'debug'|'info'|'warning'|'error'>} [options.core]
+ * @param {Pick<typeof import('@actions/core'), 'debug'|'info'|'warning'|'error'>} [options.core]
  * @param {(record: {level: string, msg: string, fields: Record<string, unknown>, line: string}) => void} [options.sink]
  *   Optional test sink that receives the structured record (already redacted).
  */

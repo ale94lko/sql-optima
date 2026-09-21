@@ -123,7 +123,7 @@ describe('run', () => {
 
     await run(deps());
 
-    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT name FROM users;', 'mariadb');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT name FROM users;', 'mariadb', { sourcePath: null });
     expect(MySQLAnalyzer).toHaveBeenCalled();
   });
 
@@ -139,6 +139,9 @@ describe('run', () => {
   });
 
   it('fails clearly when sql_file path does not exist', async () => {
+    const path = require('node:path');
+    const workspace = path.resolve('/tmp/sql-optima-ws');
+    const expected = path.resolve(workspace, 'missing.sql');
     const fs = {
       existsSync: vi.fn().mockReturnValue(false),
       readFileSync: vi.fn(),
@@ -148,21 +151,55 @@ describe('run', () => {
       if (name === 'sql_file') return 'missing.sql';
       return '';
     });
-
-    await run(deps({ fs }));
+    const prev = process.env.GITHUB_WORKSPACE;
+    process.env.GITHUB_WORKSPACE = workspace;
+    try {
+      await run(deps({ fs, path }));
+    } finally {
+      if (prev === undefined) delete process.env.GITHUB_WORKSPACE;
+      else process.env.GITHUB_WORKSPACE = prev;
+    }
 
     expect(core.setFailed).toHaveBeenCalledWith('SQL file not found: missing.sql');
+    expect(fs.existsSync).toHaveBeenCalledWith(expected);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(analyzeStaticSQL).not.toHaveBeenCalled();
+  });
+
+  it('rejects sql_file paths that escape the workspace', async () => {
+    const fs = {
+      existsSync: vi.fn(),
+      readFileSync: vi.fn(),
+    };
+    core.getInput.mockImplementation((name) => {
+      if (name === 'engine') return 'postgres';
+      if (name === 'sql_file') return '../outside.sql';
+      return '';
+    });
+    const prev = process.env.GITHUB_WORKSPACE;
+    process.env.GITHUB_WORKSPACE = require('node:path').resolve('/tmp/sql-optima-ws');
+    try {
+      await run(deps({ fs }));
+    } finally {
+      if (prev === undefined) delete process.env.GITHUB_WORKSPACE;
+      else process.env.GITHUB_WORKSPACE = prev;
+    }
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('sql_file must be inside the workspace'),
+    );
+    expect(fs.existsSync).not.toHaveBeenCalled();
     expect(fs.readFileSync).not.toHaveBeenCalled();
     expect(analyzeStaticSQL).not.toHaveBeenCalled();
   });
 
   it('prefers sql_file over sql_content and repository_dispatch payload', async () => {
+    const path = require('node:path');
+    const workspace = path.resolve('/tmp/sql-optima-ws');
+    const expected = path.resolve(workspace, 'examples/mixed_postgres.sql');
     const fs = {
-      existsSync: vi.fn().mockReturnValue(true),
+      existsSync: vi.fn((p) => p === expected),
       readFileSync: vi.fn().mockReturnValue('SELECT id FROM file_table;'),
-    };
-    const path = {
-      resolve: vi.fn((p) => `/workspace/${p}`),
     };
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'postgres';
@@ -176,12 +213,17 @@ describe('run', () => {
         sql_code: 'SELECT id FROM payload_table;',
       },
     };
+    const prev = process.env.GITHUB_WORKSPACE;
+    process.env.GITHUB_WORKSPACE = workspace;
+    try {
+      await run(deps({ fs, path }));
+    } finally {
+      if (prev === undefined) delete process.env.GITHUB_WORKSPACE;
+      else process.env.GITHUB_WORKSPACE = prev;
+    }
 
-    await run(deps({ fs, path }));
-
-    expect(path.resolve).toHaveBeenCalledWith('examples/mixed_postgres.sql');
-    expect(fs.readFileSync).toHaveBeenCalledWith('/workspace/examples/mixed_postgres.sql', 'utf8');
-    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM file_table;', 'postgres');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expected, 'utf8');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM file_table;', 'postgres', { sourcePath: 'examples/mixed_postgres.sql' });
   });
 
   it('prefers sql_content input over repository_dispatch payload', async () => {
@@ -200,7 +242,7 @@ describe('run', () => {
 
     await run(deps());
 
-    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM input_table;', 'postgresql');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT id FROM input_table;', 'postgresql', { sourcePath: null });
   });
 
   it('uses repository_dispatch payload when inputs are empty', async () => {
@@ -218,7 +260,7 @@ describe('run', () => {
 
     await run(deps());
 
-    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT * FROM orders;', 'postgresql');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT * FROM orders;', 'postgresql', { sourcePath: null });
     expect(postgresAnalyzer.testConnection).toHaveBeenCalled();
     expect(postgresAnalyzer.analyzeQuery).toHaveBeenCalledWith('SELECT * FROM orders;');
     expect(generateMarkdownReport).toHaveBeenCalled();
@@ -351,7 +393,7 @@ describe('run', () => {
 
     await run(deps());
 
-    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT 1;', 'bigquery');
+    expect(analyzeStaticSQL).toHaveBeenCalledWith('SELECT 1;', 'bigquery', { sourcePath: null });
     expect(generateMarkdownReport).toHaveBeenCalledWith(
       expect.objectContaining({
         dynamicResult: expect.objectContaining({
@@ -407,15 +449,86 @@ describe('run', () => {
     expect(PostgresAnalyzer).not.toHaveBeenCalled();
   });
 
-  it('marks the action as failed when summary writing throws', async () => {
+  it('continues when summary writing throws and still writes the report file', async () => {
     core.summary.addRaw.mockReturnValue({
       write: vi.fn().mockRejectedValue(new Error('summary failed')),
     });
 
     await run(deps());
 
-    expect(core.setFailed).toHaveBeenCalledWith('SQL Optima Action failed: summary failed');
+    expect(core.setFailed).not.toHaveBeenCalled();
+    expect(core.setOutput).toHaveBeenCalledWith('report_path', 'sql-optima-report.md');
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to write GitHub Step Summary'),
+    );
     expect(postgresAnalyzer.close).toHaveBeenCalled();
+  });
+
+  it('skips Step Summary when job_summary is none but still sets outputs', async () => {
+    core.getInput.mockImplementation((name) => {
+      const values = {
+        engine: 'postgres',
+        sql_content: 'SELECT id FROM users;',
+        db_password: 'root',
+        job_summary: 'none',
+      };
+      return values[name] || '';
+    });
+
+    await run(deps());
+
+    expect(core.summary.addRaw).not.toHaveBeenCalled();
+    expect(core.setOutput).toHaveBeenCalledWith('report', '## report');
+    expect(core.setOutput).toHaveBeenCalledWith('report_path', 'sql-optima-report.md');
+    expect(core.setOutput).toHaveBeenCalledWith('issue_count', '1');
+    expect(core.setFailed).not.toHaveBeenCalled();
+  });
+
+  it('writes a compact Step Summary when job_summary is compact', async () => {
+    analyzeStaticSQL.mockReturnValue([
+      { type: 'WILDCARD_SELECT', severity: 'MEDIUM' },
+    ]);
+    core.getInput.mockImplementation((name) => {
+      const values = {
+        engine: 'postgres',
+        sql_content: 'SELECT * FROM users;',
+        db_password: 'root',
+        job_summary: 'compact',
+      };
+      return values[name] || '';
+    });
+
+    await run(deps());
+
+    expect(core.summary.addRaw).toHaveBeenCalledTimes(1);
+    const body = core.summary.addRaw.mock.calls[0][0];
+    expect(body).toContain('## SQL Optima');
+    expect(body).toContain('`1`');
+    expect(body).toContain('`MEDIUM`');
+    expect(body).toContain('sql-optima-report.md');
+    expect(body).not.toBe('## report');
+    expect(core.setOutput).toHaveBeenCalledWith('report', '## report');
+    expect(core.setFailed).not.toHaveBeenCalled();
+  });
+
+  it('fails early on invalid job_summary', async () => {
+    core.getInput.mockImplementation((name) => {
+      const values = {
+        engine: 'postgres',
+        sql_content: 'SELECT 1;',
+        db_password: 'root',
+        job_summary: 'verbose',
+      };
+      return values[name] || '';
+    });
+
+    await run(deps());
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid job_summary'),
+    );
+    expect(analyzeStaticSQL).not.toHaveBeenCalled();
+    expect(core.summary.addRaw).not.toHaveBeenCalled();
   });
 
   it('exposes issue_count and highest_severity without failing when fail_on_severity is none', async () => {

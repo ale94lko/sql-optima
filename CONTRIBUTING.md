@@ -64,6 +64,7 @@ Do not lower these numbers to greenwash a PR; raise coverage (or the floor only 
 
 ```bash
 npm run lint
+npm run typecheck
 npm test
 npm run test:coverage
 npm run build
@@ -71,7 +72,9 @@ npm run build
 
 After changing `src/` or lockfile dependencies, commit the rebuilt `dist/` JS bundle in the same change. Consumers run the Action from `dist/index.js` without installing npm dependencies on their runners. CI fails if tracked `dist/` files are stale (`git diff --exit-code dist` in the build job).
 
-`dist/sql-wasm.wasm` is **generated** by `npm run build` (copied from `sql.js`) and is gitignored on `main` to keep OpenSSF Scorecard Binary-Artifacts clean. The release workflow force-adds the wasm onto version tags so `uses: ale94lko/sql-optima@v1` still ships a complete Action. Local/CI jobs that use `uses: ./` must run `npm run build` first (integration jobs already do).
+`dist/sql-wasm.js` and `dist/sql-wasm.wasm` are **generated** by `npm run build` (copied from `sql.js`) and are gitignored on `main` to keep OpenSSF Scorecard Binary-Artifacts clean. The release workflow force-adds both onto version tags so `uses: ale94lko/sql-optima@v1` still ships a complete Action. Local/CI jobs that use `uses: ./` must run `npm run build` first (integration jobs already do).
+
+sql.js is intentionally **not** inlined into `dist/index.js` (ncc + Emscripten breaks with `Cannot set properties of undefined (setting 'exports')` under Node 24).
 
 ## Continuous integration
 
@@ -82,14 +85,16 @@ PR and `main` pushes run [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 | `unit` | `npm run test:coverage` — Vitest + coverage floors (see [Coverage thresholds](#coverage-thresholds-enforced)); no database services |
 | `build` | `ncc` bundle + assert committed `dist/` is current |
 | `lint` | ESLint (`npm run lint`) + `npm audit --audit-level=high` + [actionlint](https://github.com/rhysd/actionlint) for workflows |
-| `integration-*` | Live Action runs against Postgres, MySQL, MariaDB, SQLite, SQL Server, and static BigQuery/Snowflake samples |
+| `typecheck` | `npm run typecheck` — TypeScript `checkJs` on `src/**/*.js` (JSDoc); fails on type drift |
+| `integration` | Live Postgres + MySQL + SQL Server service containers; `scripts/run-integration.js` fails if mixed fixtures produce `issue_count=0` |
+| `integration-*` | Per-engine Action runs against Postgres, MySQL, MariaDB, SQLite, SQL Server, and static BigQuery/Snowflake samples |
 
 Security / supply-chain (separate workflows):
 
-- GitHub **CodeQL** default code scanning (config: [`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml); avoids conflicting with an advanced workflow)
+- GitHub **CodeQL** advanced setup ([`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) + [`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml)). The config excludes `dist/**` (ncc bundle) so CodeQL does not try to parse generated JS. Prefer advanced setup over default setup on this repo so `paths-ignore` is always applied.
 - [`.github/workflows/scorecard.yml`](.github/workflows/scorecard.yml) — OpenSSF Scorecard
 
-Tag releases stay on [`.github/workflows/release.yml`](.github/workflows/release.yml) (`contents: write` only on that job). Pushing `vX.Y.Z` creates the GitHub Release and moves the major floating tag (`vX`) for Marketplace consumers (`uses: ale94lko/sql-optima@v1`). Manual / API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml) (`repository_dispatch` / `workflow_dispatch` only).
+Tag releases stay on [`.github/workflows/release.yml`](.github/workflows/release.yml) (`contents: write` only on that job). Pushing `vX.Y.Z` creates the GitHub Release and moves the major floating tag (`vX`) for Marketplace consumers (`uses: ale94lko/sql-optima@v1`). Manual / API demos use [`.github/workflows/test.yml`](.github/workflows/test.yml) (`repository_dispatch` / `workflow_dispatch` only). Do **not** hardcode the latest semver in README / docs — link [releases/latest](https://github.com/ale94lko/sql-optima/releases/latest) (and update [CHANGELOG.md](CHANGELOG.md) only).
 
 Workflows use least-privilege `permissions:` and SHA-pinned Actions with `# vX.Y.Z` comments.
 
@@ -97,11 +102,17 @@ The lint job’s `npm audit --audit-level=high` fails the PR on high/critical ad
 
 ## Pull requests
 
-1. Fork the repository and create a focused branch.
-2. Sign off commits (DCO) with `git commit -s`.
-3. Keep changes small: one feature or fix per PR, with tests that pin the new behavior.
-4. Link the PR to the related issue when applicable.
-5. Fill out the pull request template.
+1. Fork the repository and create a focused branch named after the issue:
+   - Prefer `{type}/{issue}-{slug}` (e.g. `feat/66-readme-logo`, `ci/78-pr-metadata-validator`)
+   - Or `{type}/{slug}-{issue}` (e.g. `chore/docker-compose-postgres-51`)
+   - Allowed types: `feat`, `fix`, `docs`, `ci`, `chore`, `test`, `refactor`, `security`, `release`, `perf`, `build`, `style`
+2. Use a Conventional Commits PR title (`feat: …`, `fix: …`, `ci: …`, …).
+3. Sign off commits (DCO) with `git commit -s`.
+4. Keep changes small: one feature or fix per PR, with tests that pin the new behavior.
+5. Link the PR to the related issue (`Fixes #<issue>` in the body) so [issue-in-progress](.github/workflows/issue-in-progress.yml) can label and assign it.
+6. Fill out the pull request template.
+
+CI enforces branch + title rules via [pr-metadata-validator](https://github.com/ale94lko/pr-metadata-validator) (`.github/workflows/validate-pr-metadata.yml`).
 
 ## Dependabot updates
 

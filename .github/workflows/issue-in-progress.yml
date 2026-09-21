@@ -1,0 +1,168 @@
+# When work starts on an issue (linked PR or a branch named after the issue),
+# mark that issue as In Progress and assign the PR/branch owner.
+#
+# GitHub does not emit a workflow event for Development-sidebar linking alone.
+# Coverage:
+#   - pull_request opened/edited/… → closing keywords, GraphQL linked issues, branch name
+#   - create (branch) → issue number from branch name (e.g. feat/66-slug)
+name: Issue in progress on link
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+  create:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: issue-in-progress-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mark-in-progress:
+    name: Label and assign linked issues
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'create' && github.event.ref_type == 'branch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure label, then update linked issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BRANCH_REF: ${{ github.event.ref }}
+          ACTOR: ${{ github.actor }}
+          LABEL: 'status: In Progress'
+        run: |
+          set -euo pipefail
+
+          ensure_label() {
+            if gh label list --repo "$REPO" --json name --jq '.[].name' | grep -Fxq "$LABEL"; then
+              return 0
+            fi
+            if ! gh label create "$LABEL" \
+              --repo "$REPO" \
+              --color '1D76DB' \
+              --description 'Work has started (linked PR or branch)'; then
+              echo "Warning: could not create label '$LABEL' (create it once in the repo Settings → Labels)"
+            fi
+          }
+
+          # Prefer type/123-slug (repo convention); also accept trailing -123.
+          issue_from_branch() {
+            local ref="$1"
+            ref="${ref#refs/heads/}"
+            if [[ "$ref" =~ ^[^/]+/([0-9]+)([-_/]|$) ]]; then
+              printf '%s\n' "${BASH_REMATCH[1]}"
+              return 0
+            fi
+            if [[ "$ref" =~ -([0-9]+)$ ]]; then
+              printf '%s\n' "${BASH_REMATCH[1]}"
+              return 0
+            fi
+            return 1
+          }
+
+          collect_from_body() {
+            local body="$1"
+            # Fixes #12 / Closes: #12 / Resolves #12 (closing keywords)
+            printf '%s' "$body" | grep -oiE \
+              '(closes?|closed|fix(es|ed)?|resolves?|resolved)[:[:space:]]*#[0-9]+' \
+              | grep -oE '[0-9]+' || true
+          }
+
+          collect_from_graphql() {
+            local pr="$1"
+            local owner="${REPO%%/*}"
+            local name="${REPO#*/}"
+            # GraphQL variables ($owner/$name/$number), not shell expansions.
+            # shellcheck disable=SC2016
+            gh api graphql \
+              -f owner="$owner" \
+              -f name="$name" \
+              -F number="$pr" \
+              -f query='
+                query($owner:String!, $name:String!, $number:Int!) {
+                  repository(owner:$owner, name:$name) {
+                    pullRequest(number:$number) {
+                      closingIssuesReferences(first: 20) {
+                        nodes { number }
+                      }
+                    }
+                  }
+                }' \
+              --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[].number' \
+              || true
+          }
+
+          mark_issue() {
+            local issue="$1"
+            local assignee="$2"
+
+            if ! gh issue view "$issue" --repo "$REPO" --json number >/dev/null 2>&1; then
+              echo "Skip #$issue (not found in $REPO)"
+              return 0
+            fi
+
+            echo "Marking #$issue → label '$LABEL', assignee '${assignee:-none}'"
+            gh issue edit "$issue" --repo "$REPO" --add-label "$LABEL"
+
+            if [[ -z "$assignee" || "$assignee" == *'[bot]' ]]; then
+              echo "Skip assignee for #$issue"
+              return 0
+            fi
+            # Non-collaborators cannot be assigned; do not fail the job.
+            if ! gh issue edit "$issue" --repo "$REPO" --add-assignee "$assignee"; then
+              echo "Warning: could not assign @$assignee to #$issue"
+            fi
+          }
+
+          ensure_label
+
+          issues=()
+          assignee=""
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            assignee="$PR_AUTHOR"
+            mapfile -t from_gql < <(collect_from_graphql "$PR_NUMBER")
+            mapfile -t from_body < <(collect_from_body "${PR_BODY:-}")
+            mapfile -t from_branch < <(issue_from_branch "$HEAD_REF" || true)
+            if [[ ${#from_gql[@]} -gt 0 ]]; then issues+=("${from_gql[@]}"); fi
+            if [[ ${#from_body[@]} -gt 0 ]]; then issues+=("${from_body[@]}"); fi
+            if [[ ${#from_branch[@]} -gt 0 ]]; then issues+=("${from_branch[@]}"); fi
+          else
+            case "$BRANCH_REF" in
+              main|master|develop|output) echo "Skip protected branch $BRANCH_REF"; exit 0 ;;
+            esac
+            assignee="$ACTOR"
+            mapfile -t from_branch < <(issue_from_branch "$BRANCH_REF" || true)
+            if [[ ${#from_branch[@]} -gt 0 ]]; then issues+=("${from_branch[@]}"); fi
+          fi
+
+          # Unique, numeric issue ids only
+          declare -A seen=()
+          unique=()
+          for n in "${issues[@]}"; do
+            [[ -z "$n" ]] && continue
+            [[ "$n" =~ ^[0-9]+$ ]] || continue
+            [[ -n "${seen[$n]:-}" ]] && continue
+            seen[$n]=1
+            unique+=("$n")
+          done
+
+          if [[ ${#unique[@]} -eq 0 ]]; then
+            echo "No linked issue found; nothing to do."
+            exit 0
+          fi
+
+          for n in "${unique[@]}"; do
+            mark_issue "$n" "$assignee"
+          done

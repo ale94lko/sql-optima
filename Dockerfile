@@ -15,20 +15,16 @@ RUN npm ci
 COPY src ./src
 COPY scripts ./scripts
 
-# Project build, then re-bundle with sql.js external. ncc-inlined sql.js throws
-# "Cannot set properties of undefined (setting 'exports')" when initSqlJs loads
-# wasm, which skips in-memory EXPLAIN. Runtime copies node_modules/sql.js.
-RUN npm run build \
-    && npx ncc build src/index.js -o dist --license licenses.txt --external sql.js \
-    && node scripts/copy-sqljs-wasm.js
+# `npm run build` bundles with ncc and copies sql-wasm.js + sql-wasm.wasm next to
+# dist/ (see scripts/copy-sqljs-wasm.js). SqliteAnalyzer loads those assets at runtime.
+RUN npm run build
 
-# Runtime: ncc bundle + sql.js + fixtures. SQLite smoke needs no extra DB service.
+# Runtime: ncc bundle + sql.js wasm assets + fixtures. SQLite smoke needs no extra DB.
 FROM node:24-alpine
 
 WORKDIR /app
 
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules/sql.js ./node_modules/sql.js
 COPY examples ./examples
 
 # @actions/core maps action.yml inputs to INPUT_* (uppercase, underscores).

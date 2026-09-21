@@ -7,7 +7,7 @@ What sql-optima intends to do (and not do) over the next year.
 - Keep CI, CodeQL, Scorecard, and Dependabot green on `main`.
 - Keep the maintainer bus factor at **2+** ([@ale94lko](https://github.com/ale94lko) and [@dyk1454683243-sudo](https://github.com/dyk1454683243-sudo)) and continue two-person review on community, Dependabot, and maintainer PRs.
 - Expand dialect fixtures and regression tests as engines evolve.
-- Keep Marketplace `@v1` floating tag current with semver releases.
+- Keep Marketplace `@v1` floating tag current with semver releases ([latest release](https://github.com/ale94lko/sql-optima/releases/latest)).
 
 ## Explicitly out of scope (near term)
 

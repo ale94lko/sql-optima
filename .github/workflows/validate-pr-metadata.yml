@@ -1,0 +1,40 @@
+# Enforce the same branch / PR conventions that issue-in-progress.yml relies on
+# (see https://github.com/ale94lko/sql-optima/pull/77):
+#   - branch: {type}/{issue}-{slug} or {type}/{slug}-{issue}
+#   - title: Conventional Commits (feat:, fix:, ci:, …)
+# Prefer Fixes #<issue> in the PR body (pull request template).
+#
+# Uses https://github.com/ale94lko/pr-metadata-validator (validates PR head branch + title).
+name: Validate PR metadata
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: validate-pr-metadata-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: PR & branch standards
+    if: >
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate branch name and PR title
+        uses: ale94lko/pr-metadata-validator@7c83863b762dad8bf572eaf49f022ebf28789146 # v1.0.0
+        with:
+          validate_branch: 'true'
+          validate_title: 'true'
+          # Custom regexes encode GitHub issue numbers (not Jira PROJ-123).
+          require_ticket: 'false'
+          allowed_prefixes: 'feat, fix, docs, ci, chore, test, refactor, security, release, perf, build, style'
+          # type/123, type/123-slug, or type/slug-123 (matches issue-in-progress.yml)
+          branch_regex: '/^(feat|fix|docs|ci|chore|test|refactor|security|release|perf|build|style)\/(\d+([-\/].*)?|.+-\d+)$/'
+          title_regex: '/^(feat|fix|docs|ci|chore|test|refactor|security|release|perf|build|style|revert)(\(.+\))?!?: .+/'

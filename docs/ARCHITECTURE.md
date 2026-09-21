@@ -46,4 +46,4 @@ Dangerous statements (`DROP DATABASE`, `GRANT`, etc.) are blocked before apply/E
 
 ## Build
 
-`npm run build` uses `@vercel/ncc` to produce `dist/index.js` and copies `sql-wasm.wasm` for SQLite. Consumers typically pin a release tag and do not run `npm install` on the Action itself.
+`npm run build` uses `@vercel/ncc` to produce `dist/index.js` and copies `sql-wasm.js` + `sql-wasm.wasm` beside it for SQLite (sql.js is not inlined — see CONTRIBUTING). Consumers typically pin a release tag and do not run `npm install` on the Action itself.

@@ -1,7 +1,14 @@
 name: CodeQL config
 
+# Applied by advanced setup (.github/workflows/codeql.yml).
+# Default setup ignores this file unless github-codeql-config-file is set.
+
 paths-ignore:
   - dist
+  - dist/**
   - coverage
+  - coverage/**
   - node_modules
+  - node_modules/**
   - '**/*.test.js'
+  - '**/*.wasm'

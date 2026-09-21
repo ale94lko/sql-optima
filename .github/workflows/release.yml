@@ -38,11 +38,11 @@ jobs:
           git config --local user.name "github-actions[bot]"
           # JS bundle is tracked; WASM is gitignored on main but must ship on release tags.
           git add dist/
-          git add -f dist/sql-wasm.wasm
+          git add -f dist/sql-wasm.wasm dist/sql-wasm.js
           if ! git diff-index --quiet HEAD; then
             git commit -m "build: update dist bundle for release ${{ github.ref_name }}"
             # Annotated/lightweight tags already exist on push; move the tag to
-            # include release-only artifacts (e.g. force-added sql-wasm.wasm).
+            # include release-only artifacts (e.g. force-added sql-wasm.js / .wasm).
             git tag -f "${{ github.ref_name }}"
             git push origin "refs/tags/${{ github.ref_name }}" --force
           else
