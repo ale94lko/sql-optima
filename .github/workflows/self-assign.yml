@@ -1,0 +1,90 @@
+# Lets fork contributors claim issues without write/triage access.
+# GitHub only lets collaborators assign via the UI; commenting on an issue
+# makes the commenter assignable, and GITHUB_TOKEN (push via Actions) can
+# add them. There is no repo setting that grants this to fork owners alone.
+#
+# Commands (issue comments only, not PRs):
+#   /assign   — claim the issue (commenter)
+#   /unassign — release the issue (commenter only)
+name: Self-assign issue
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  # Reaction ack (+1) on the command comment.
+  reactions: write
+
+concurrency:
+  group: self-assign-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  self-assign:
+    name: Handle /assign and /unassign
+    if: >
+      !github.event.issue.pull_request &&
+      (startsWith(github.event.comment.body, '/assign') ||
+       startsWith(github.event.comment.body, '/unassign'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Apply assignment change
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const body = context.payload.comment.body.trim();
+            const tokens = body.split(/\s+/);
+            const command = tokens[0];
+            if (command !== '/assign' && command !== '/unassign') {
+              core.info(`Ignoring comment; not an assignment command: ${command}`);
+              return;
+            }
+
+            const commenter = context.payload.comment.user.login;
+            const common = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            };
+
+            const { data: issue } = await github.rest.issues.get(common);
+            if (issue.state !== 'open') {
+              core.info(`Issue #${common.issue_number} is ${issue.state}; skip`);
+              return;
+            }
+
+            const current = (issue.assignees || []).map((a) => a.login);
+            const unassign = command === '/unassign';
+
+            if (unassign) {
+              if (!current.includes(commenter)) {
+                core.info(`${commenter} is not assigned; nothing to unassign`);
+                return;
+              }
+              await github.rest.issues.removeAssignees({
+                ...common,
+                assignees: [commenter],
+              });
+              core.info(`Unassigned ${commenter} from #${common.issue_number}`);
+            } else {
+              // Self-assign only (ignore @mentions for now — keeps the surface small).
+              if (current.includes(commenter)) {
+                core.info(`${commenter} already assigned`);
+              } else {
+                await github.rest.issues.addAssignees({
+                  ...common,
+                  assignees: [commenter],
+                });
+                core.info(`Assigned ${commenter} to #${common.issue_number}`);
+              }
+            }
+
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: '+1',
+            });

@@ -100,6 +100,16 @@ Workflows use least-privilege `permissions:` and SHA-pinned Actions with `# vX.Y
 
 The lint job’s `npm audit --audit-level=high` fails the PR on high/critical advisories. Prefer upgrading the dependency (or a Dependabot PR) over `npm audit --ignore`; only document a temporary exception in this file if a transitive finding cannot be fixed yet.
 
+## Claiming an issue
+
+Fork contributors do **not** get Triage/Write on this user-owned repo, so the Assignees sidebar in the UI will not list you. To claim work:
+
+1. Comment **`/assign`** on an open issue (the comment itself makes you assignable; [self-assign.yml](.github/workflows/self-assign.yml) then assigns you).
+2. Comment **`/unassign`** if you need to release it.
+3. Prefer issues labeled for new contributors when getting started (see [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md)).
+
+Only claim issues you intend to open a PR for soon. If an issue already has an assignee, coordinate in the comments before taking over.
+
 ## Pull requests
 
 1. Fork the repository and create a focused branch named after the issue:

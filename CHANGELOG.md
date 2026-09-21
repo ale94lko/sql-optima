@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Root `Dockerfile` (`node:24-alpine`) to build and run the Action without a local Node 24 toolchain ([#70](https://github.com/ale94lko/sql-optima/issues/70)).
+- Issue self-assign via `/assign` / `/unassign` comments so fork contributors can claim work without Write access ([#106](https://github.com/ale94lko/sql-optima/issues/106)).
 - Input `job_summary` (`full` | `compact` | `none`) so consumers can avoid a duplicated Job Summary while still getting `sql-optima-report.md` and outputs ([#88](https://github.com/ale94lko/sql-optima/issues/88)).
 - Default-path CI `integration` job against live Postgres, MySQL, and SQL Server; fails if mixed fixtures produce `issue_count=0` ([#69](https://github.com/ale94lko/sql-optima/issues/69)).
 
