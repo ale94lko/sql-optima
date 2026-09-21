@@ -91235,7 +91235,7 @@ function analyzeStaticSQL(sqlContent, engine = 'postgres', options = {}) {
       switch (stmt.type) {
         case 'create':
           if (stmt.keyword === 'table') {
-            analyzeCreateTable(stmt, issues, engine);
+            analyzeCreateTable(/** @type {SqlCreateTableStmt} */ (stmt), issues, engine);
           }
           break;
 
@@ -91338,6 +91338,21 @@ function buildSyntaxErrorIssue(error, sqlContent, sourcePath) {
 
 /**
  * @typedef {{ expr?: { value?: unknown }, value?: unknown, column?: string | { expr?: { value?: unknown } } }} SqlColumnNode
+ * @typedef {{ keyword?: string, value?: unknown }} SqlTableOption
+ * @typedef {{ constraint_type?: string }} SqlConstraintNode
+ * @typedef {{
+ *   resource?: string,
+ *   definition?: Array<unknown> | { constraints?: SqlConstraintNode[] },
+ *   constraint_type?: string,
+ *   column?: unknown,
+ *   primary_key?: string,
+ *   unique?: string
+ * }} SqlCreateDefinition
+ * @typedef {{
+ *   table_options?: SqlTableOption[],
+ *   table?: Array<{ table?: string }> | { table?: string },
+ *   create_definitions?: SqlCreateDefinition[]
+ * }} SqlCreateTableStmt
  */
 
 /**
@@ -91390,7 +91405,7 @@ function isMysqlFamilyEngine(engine) {
 /**
  * Resolves the storage engine from CREATE TABLE options.
  * MySQL/MariaDB default to InnoDB when ENGINE is omitted.
- * @param {object} stmt
+ * @param {SqlCreateTableStmt} stmt
  * @param {string} engine
  * @returns {string|null} Lowercase engine name, or null when not MySQL-family.
  */
@@ -91413,7 +91428,7 @@ function resolveMysqlStorageEngine(stmt, engine) {
 
 /**
  * True when MySQL/MariaDB InnoDB will auto-create indexes for FOREIGN KEY columns.
- * @param {object} stmt
+ * @param {SqlCreateTableStmt} stmt
  * @param {string} engine
  * @returns {boolean}
  */
@@ -91439,7 +91454,7 @@ function getIndexColumnNames(definition) {
 /**
  * Collects index column prefixes declared in the same CREATE TABLE.
  * An index covers an FK when the FK columns are a leftmost prefix of the index.
- * @param {object[]} definitions
+ * @param {SqlCreateDefinition[]} definitions
  * @returns {string[][]}
  */
 function collectIndexColumnPrefixes(definitions) {
@@ -91486,7 +91501,9 @@ function collectIndexColumnPrefixes(definitions) {
         prefixes.push([normalized]);
       }
 
-      const hasPkConstraint = def.definition?.constraints?.some(
+      const columnDefinition =
+        def.definition && !Array.isArray(def.definition) ? def.definition : null;
+      const hasPkConstraint = columnDefinition?.constraints?.some(
         (c) => c.constraint_type?.toLowerCase() === 'primary key',
       );
       if (hasPkConstraint) {
@@ -91516,12 +91533,13 @@ function indexCoversForeignKey(fkColumns, indexPrefixes) {
 
 /**
  * Inspects CREATE TABLE statements for structural best practices.
- * @param {object} stmt
+ * @param {SqlCreateTableStmt} stmt
  * @param {object[]} issues
  * @param {string} engine
  */
 function analyzeCreateTable(stmt, issues, engine = 'postgres') {
-  const tableName = stmt.table[0]?.table || 'unknown_table';
+  const tableRef = Array.isArray(stmt.table) ? stmt.table[0] : stmt.table;
+  const tableName = tableRef?.table || 'unknown_table';
   const definitions = stmt.create_definitions || [];
   const indexPrefixes = collectIndexColumnPrefixes(definitions);
   const skipUnindexedFkForInnoDb = innodbAutoIndexesForeignKeys(stmt, engine);
@@ -91540,7 +91558,9 @@ function analyzeCreateTable(stmt, issues, engine = 'postgres') {
         hasPrimaryKey = true;
       }
 
-      const isPkColumn = def.definition?.constraints?.some(
+      const columnDefinition =
+        def.definition && !Array.isArray(def.definition) ? def.definition : null;
+      const isPkColumn = columnDefinition?.constraints?.some(
         (c) => c.constraint_type?.toLowerCase() === 'primary key',
       );
       if (isPkColumn) {
