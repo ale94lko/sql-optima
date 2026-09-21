@@ -19,6 +19,7 @@ class MySQLAnalyzer {
    * @param {Object} config - Database connection options.
    * @param {Object} [dependencies] - Optional test doubles.
    * @param {Object} [dependencies.pool] - Injected mysql2 pool.
+   * @param {Object} [dependencies.logger] - Optional structured logger.
    */
   constructor(config, dependencies = {}) {
     this.logger = dependencies.logger || null;

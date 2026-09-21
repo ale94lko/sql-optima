@@ -12,7 +12,7 @@ report it to me as described below.
 
 Instead, please report them using one of:
 
-1. [GitHub Security Advisories](https://github.com/ale94lko/sql-optima/security/advisories/new) (preferred for private discussion), or
+1. [Private vulnerability reporting](https://github.com/ale94lko/sql-optima/security/advisories/report) on GitHub (preferred), or
 2. Email [ale94lko@gmail.com](mailto:ale94lko@gmail.com)
 
 Please include the requested information listed below (as much as you can

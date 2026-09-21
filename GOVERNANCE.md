@@ -22,7 +22,7 @@ sql-optima uses a **maintainer-led** model:
 
 | Role | Responsibilities | Current holders |
 | :--- | :--- | :--- |
-| **Maintainer** | Merge PRs, triage issues, cut releases, respond to security reports, update Dependabot/CI | [@ale94lko](https://github.com/ale94lko) (Fidel Alejandro Fernández Arias); [@dyk1454683243-sudo](https://github.com/dyk1454683243-sudo) (David) — write collaborator |
+| **Maintainer** | Merge PRs, triage issues, cut releases, respond to security reports, update Dependabot/CI | [@ale94lko](https://github.com/ale94lko) (Fidel Alejandro Fernández Arias); [@leoflavio1989](https://github.com/leoflavio1989) |
 | **Contributor** | Propose changes via PR; follow DCO and coding standards | Anyone submitting a signed-off PR |
 | **Security contact** | Receive and coordinate private vulnerability reports | Maintainers (see [SECURITY.md](SECURITY.md)) |
 
@@ -37,7 +37,7 @@ If a maintainer is unavailable:
 
 ## Bus factor
 
-The engineering bus factor is **2+**: [@ale94lko](https://github.com/ale94lko) and [@dyk1454683243-sudo](https://github.com/dyk1454683243-sudo) both contribute and can continue triage, review, and releases. Contributor graph: [graphs/contributors](https://github.com/ale94lko/sql-optima/graphs/contributors).
+The engineering bus factor is **2+**: [@ale94lko](https://github.com/ale94lko) and [@leoflavio1989](https://github.com/leoflavio1989) both contribute and can continue triage, review, and releases. Contributor graph: [graphs/contributors](https://github.com/ale94lko/sql-optima/graphs/contributors).
 
 ## Authentication (2FA)
 

@@ -19,6 +19,7 @@ class PostgresAnalyzer {
    * @param {Object} config - Database connection options.
    * @param {Object} [dependencies] - Optional test doubles.
    * @param {import('pg').Pool} [dependencies.pool] - Injected pool instance.
+   * @param {Object} [dependencies.logger] - Optional structured logger.
    */
   constructor(config, dependencies = {}) {
     this.logger = dependencies.logger || null;

@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: MIT
  */
 
-const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 const {
@@ -11,6 +10,60 @@ const {
   extractSchemaStatements,
   stripLeadingComments,
 } = require('../sqlUtils');
+
+/**
+ * Build a cwd-relative path without `path.join(process.cwd(), literal…)` so ncc’s
+ * asset relocator cannot rewrite it into platform-specific `__nccwpck_require__.ab`
+ * stubs (that made Build dist fail on Linux vs Windows).
+ * @param {string[]} parts
+ * @returns {string}
+ */
+function pathFromCwd(parts) {
+  let result = process.cwd();
+  for (const part of parts) {
+    result += path.sep + part;
+  }
+  return result;
+}
+
+/**
+ * Resolve sql.js without a static `require('sql.js')` so ncc does not inline it.
+ * Prefer `sql-wasm.js` next to the Action entry (`dist/`), then cwd installs.
+ * @returns {Function}
+ */
+function loadInitSqlJs() {
+  const fileName = ['sql', '-wasm', '.js'].join('');
+  const candidates = [
+    path.join(__dirname, fileName),
+    pathFromCwd(['dist', fileName]),
+    pathFromCwd(['node_modules', 'sql.js', 'dist', fileName]),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      // Dynamic path keeps sql.js out of the ncc bundle (see scripts/copy-sqljs-wasm.js).
+      return require(candidate);
+    }
+  }
+
+  throw new Error(
+    'sql.js runtime not found (sql-wasm.js). Run `npm run build` (or `npm install`) so the Action can load SQLite.',
+  );
+}
+
+/**
+ * Prefer a wasm binary next to the loader / Action entry.
+ * @returns {string|null}
+ */
+function resolveWasmPath() {
+  const fileName = ['sql', '-wasm', '.wasm'].join('');
+  const candidates = [
+    path.join(__dirname, fileName),
+    pathFromCwd(['dist', fileName]),
+    pathFromCwd(['node_modules', 'sql.js', 'dist', fileName]),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
 
 /**
  * SQLite analyzer using an in-memory sql.js database.
@@ -21,11 +74,12 @@ class SqliteAnalyzer {
    * @param {Object} [config]
    * @param {Object} [dependencies]
    * @param {Function} [dependencies.initSqlJs] - Injected sql.js initializer for tests.
+   * @param {Object} [dependencies.logger] - Optional structured logger.
    */
   constructor(config = {}, dependencies = {}) {
     this.config = config;
     this.logger = dependencies.logger || null;
-    this.initSqlJs = dependencies.initSqlJs || initSqlJs;
+    this.initSqlJs = dependencies.initSqlJs || null;
     this.db = null;
     this.SQL = null;
   }
@@ -51,12 +105,13 @@ class SqliteAnalyzer {
       phase: 'connect',
     });
     const options = {};
-    const wasmPath = path.join(__dirname, 'sql-wasm.wasm');
-    if (fs.existsSync(wasmPath)) {
+    const wasmPath = resolveWasmPath();
+    if (wasmPath) {
       options.wasmBinary = fs.readFileSync(wasmPath);
     }
 
-    this.SQL = await this.initSqlJs(options);
+    const initSqlJs = this.initSqlJs || loadInitSqlJs();
+    this.SQL = await initSqlJs(options);
     this.db = new this.SQL.Database();
     this.db.run('SELECT 1;');
     return true;

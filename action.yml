@@ -43,10 +43,16 @@ inputs:
     description: 'Comma-separated issue types that always fail the job (e.g. MISSING_PRIMARY_KEY,WILDCARD_SELECT)'
     required: false
     default: ''
+  job_summary:
+    description: 'How much to write to $GITHUB_STEP_SUMMARY (full | compact | none). File report and outputs are always produced.'
+    required: false
+    default: 'full'
 
 outputs:
   report:
-    description: 'Generated Markdown report containing optimization suggestions'
+    description: 'Compact Markdown report (safe for Job Summary / Action outputs; large SQL embeds may be truncated)'
+  report_path:
+    description: 'Workspace-relative path to the full Markdown report file (sql-optima-report.md)'
   issue_count:
     description: 'Total number of static + dynamic findings'
   highest_severity:

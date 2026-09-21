@@ -20,6 +20,7 @@ class MssqlAnalyzer {
    * @param {Object} [dependencies] - Optional test doubles.
    * @param {Object} [dependencies.pool] - Injected mssql ConnectionPool-like object.
    * @param {Object} [dependencies.sql] - Injected mssql module (for connect).
+   * @param {Object} [dependencies.logger] - Optional structured logger.
    */
   constructor(config, dependencies = {}) {
     this.logger = dependencies.logger || null;

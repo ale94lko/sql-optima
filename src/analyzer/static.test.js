@@ -4,6 +4,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -60,6 +63,115 @@ describe('analyzeStaticSQL', () => {
     );
   });
 
+  it('does not flag foreign keys that already have an explicit KEY', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE orders (
+        id INT PRIMARY KEY,
+        user_id INT,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        KEY idx_orders_user_id (user_id)
+      );
+    `,
+      'postgres',
+    );
+
+    expect(issues.find((issue) => issue.type === 'UNINDEXED_FOREIGN_KEY')).toBeUndefined();
+  });
+
+  it('does not flag foreign keys covered by a composite index leftmost prefix', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE order_items (
+        id INT PRIMARY KEY,
+        order_id INT,
+        product_id INT,
+        FOREIGN KEY (order_id) REFERENCES orders(id),
+        KEY idx_order_product (order_id, product_id)
+      );
+    `,
+      'postgres',
+    );
+
+    expect(issues.find((issue) => issue.type === 'UNINDEXED_FOREIGN_KEY')).toBeUndefined();
+  });
+
+  it('does not flag MySQL InnoDB foreign keys (engine auto-creates indexes)', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE active_tokens (
+        id INT PRIMARY KEY,
+        user_id INT,
+        tenant_id INT,
+        token VARCHAR(255),
+        token_type VARCHAR(50),
+        family_id VARCHAR(50),
+        CONSTRAINT active_tokens_fk_user FOREIGN KEY (user_id) REFERENCES tenant_users (id) ON DELETE CASCADE,
+        CONSTRAINT active_tokens_ibfk_1 FOREIGN KEY (tenant_id) REFERENCES tenants (id),
+        KEY active_tokens_idx_user_id (user_id),
+        KEY active_tokens_idx_tenant_type_token (tenant_id, token_type, token),
+        KEY active_tokens_idx_family (tenant_id, family_id)
+      ) ENGINE=InnoDB;
+    `,
+      'mysql',
+    );
+
+    expect(issues.find((issue) => issue.type === 'UNINDEXED_FOREIGN_KEY')).toBeUndefined();
+  });
+
+  it('does not flag MySQL foreign keys when ENGINE is omitted (defaults to InnoDB)', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE orders (
+        id INT PRIMARY KEY,
+        user_id INT,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+    `,
+      'mysql',
+    );
+
+    expect(issues.find((issue) => issue.type === 'UNINDEXED_FOREIGN_KEY')).toBeUndefined();
+  });
+
+  it('still flags unindexed foreign keys on MySQL MyISAM', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE orders (
+        id INT PRIMARY KEY,
+        user_id INT,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      ) ENGINE=MyISAM;
+    `,
+      'mysql',
+    );
+
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'UNINDEXED_FOREIGN_KEY',
+          message: expect.stringContaining('user_id'),
+        }),
+      ]),
+    );
+  });
+
+  it('does not flag MyISAM foreign keys when an explicit index already covers them', () => {
+    const issues = analyzeStaticSQL(
+      `
+      CREATE TABLE orders (
+        id INT PRIMARY KEY,
+        user_id INT,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        KEY idx_user (user_id)
+      ) ENGINE=MyISAM;
+    `,
+      'mysql',
+    );
+
+    expect(issues.find((issue) => issue.type === 'UNINDEXED_FOREIGN_KEY')).toBeUndefined();
+  });
+
   it('flags SELECT * queries', () => {
     const issues = analyzeStaticSQL('SELECT * FROM users;');
 
@@ -95,8 +207,39 @@ describe('analyzeStaticSQL', () => {
       expect.objectContaining({
         type: 'SYNTAX_ERROR',
         severity: 'CRITICAL',
+        line: 1,
+        column: expect.any(Number),
+        location: expect.stringMatching(/^L1:C\d+$/),
+        snippet: expect.stringContaining('NOT VALID SQL !!!'),
       }),
     ]);
+  });
+
+  it('includes line/column and source path on SYNTAX_ERROR findings', () => {
+    const sql = [
+      'SELECT id FROM users;',
+      'SELECT !!! FROM broken;',
+      'SELECT 1;',
+    ].join('\n');
+
+    const issues = analyzeStaticSQL(sql, 'mysql', {
+      sourcePath: 'db/tenants/bad.sql',
+    });
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toEqual(
+      expect.objectContaining({
+        type: 'SYNTAX_ERROR',
+        severity: 'CRITICAL',
+        line: 2,
+        column: expect.any(Number),
+        source: 'db/tenants/bad.sql',
+        location: expect.stringMatching(/^db\/tenants\/bad\.sql:2:\d+$/),
+        message: expect.stringMatching(/^db\/tenants\/bad\.sql:2:\d+ — Failed to parse SQL syntax:/),
+        snippet: expect.stringContaining('> 2 |'),
+      }),
+    );
+    expect(issues[0].snippet).toContain('SELECT !!! FROM broken;');
   });
 
   it('supports the mysql dialect', () => {
@@ -135,6 +278,20 @@ describe('analyzeStaticSQL', () => {
     const issues = analyzeStaticSQL('DROP TABLE IF EXISTS users;');
 
     expect(issues).toEqual([]);
+  });
+
+  it('CI mixed fixtures produce static findings (integration job gate)', () => {
+    const examplesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'examples');
+    const fixtures = [
+      ['mixed_postgres.sql', 'postgres'],
+      ['mixed_mysql.sql', 'mysql'],
+      ['mixed_mssql.sql', 'mssql'],
+    ];
+
+    for (const [file, engine] of fixtures) {
+      const sql = readFileSync(join(examplesDir, file), 'utf8');
+      expect(analyzeStaticSQL(sql, engine).length, file).toBeGreaterThan(0);
+    }
   });
 
   it('normalizes nested column identifiers through getColumnName', () => {

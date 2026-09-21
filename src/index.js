@@ -18,13 +18,20 @@ async function run(overrides = {}) {
   const MySQLAnalyzer = overrides.MySQLAnalyzer || require('./db/mysql');
   const SqliteAnalyzer = overrides.SqliteAnalyzer || require('./db/sqlite');
   const MssqlAnalyzer = overrides.MssqlAnalyzer || require('./db/mssql');
-  const { generateMarkdownReport } =
-    overrides.formatter || require('./formatter');
+  const formatter = {
+    ...require('./formatter'),
+    ...(overrides.formatter || {}),
+  };
+  const {
+    generateMarkdownReport,
+    generateCompactJobSummary,
+    normalizeJobSummaryMode,
+  } = formatter;
   const sqlUtils = overrides.sqlUtils || require('./sqlUtils');
   const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword, splitStatements } =
     sqlUtils;
   const inputValidation = overrides.inputValidation || require('./inputValidation');
-  const { validateActionInputs } = inputValidation;
+  const { validateActionInputs, resolveSqlFileWithinWorkspace } = inputValidation;
   const severityGate = overrides.severityGate || require('./severityGate');
   const { evaluateSeverityGate } = severityGate;
   const { createLogger } = overrides.loggerModule || require('./logger');
@@ -56,10 +63,26 @@ async function run(overrides = {}) {
     }
     engine = inputCheck.engine;
 
+    let jobSummaryMode;
+    try {
+      jobSummaryMode = normalizeJobSummaryMode(core.getInput('job_summary') || 'full');
+    } catch (modeError) {
+      core.setFailed(modeError.message);
+      return;
+    }
+
     // 3. Resolve SQL source: sql_file > sql_content > repository_dispatch payload
     let sqlContent = '';
     if (sqlFile) {
-      const resolvedPath = path.resolve(sqlFile);
+      const pathCheck = resolveSqlFileWithinWorkspace(sqlFile, {
+        pathModule: path,
+        workspaceRoot: process.env.GITHUB_WORKSPACE || process.cwd(),
+      });
+      if (!pathCheck.ok) {
+        core.setFailed(pathCheck.error);
+        return;
+      }
+      const resolvedPath = pathCheck.resolvedPath;
       if (!fs.existsSync(resolvedPath)) {
         core.setFailed(`SQL file not found: ${sqlFile}`);
         return;
@@ -93,7 +116,9 @@ async function run(overrides = {}) {
 
     // 4. Execute Static AST Analysis
     log.info('Running static AST analysis', { engine, phase: 'static', statementCount });
-    const staticIssues = analyzeStaticSQL(sqlContent, engine);
+    const staticIssues = analyzeStaticSQL(sqlContent, engine, {
+      sourcePath: sqlFile || null,
+    });
     log.info('Static analysis complete', {
       engine,
       phase: 'static',
@@ -200,18 +225,36 @@ async function run(overrides = {}) {
       log.info(dynamicResult.reason, { engine, phase: 'dynamic', executed: false });
     }
 
-    // 8. Generate Markdown Report
-    log.info('Generating markdown summary report', { engine, phase: 'report' });
-    const markdownReport = generateMarkdownReport({
+    // 8. Generate Markdown Report (compact for Step Summary; full for file / output)
+    log.info('Generating markdown summary report', {
+      engine,
+      phase: 'report',
+      jobSummary: jobSummaryMode,
+    });
+    const summaryReport = generateMarkdownReport({
       engine,
       sqlContent,
       staticIssues,
       dynamicResult,
     });
+    const fullReport = generateMarkdownReport({
+      engine,
+      sqlContent,
+      staticIssues,
+      dynamicResult,
+      embedLimits: null,
+    });
 
-    // 9. Output to GitHub Step Summary ($GITHUB_STEP_SUMMARY) and Action Outputs
-    await core.summary.addRaw(markdownReport).write();
-    core.setOutput('report', markdownReport);
+    const workspaceRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+    const reportPath = path.join(workspaceRoot, 'sql-optima-report.md');
+    fs.writeFileSync(reportPath, fullReport, 'utf8');
+    log.info('Wrote full markdown report', {
+      engine,
+      phase: 'report',
+      reportPath: 'sql-optima-report.md',
+      summaryBytes: Buffer.byteLength(summaryReport, 'utf8'),
+      fullBytes: Buffer.byteLength(fullReport, 'utf8'),
+    });
 
     const allIssues = [
       ...staticIssues,
@@ -231,6 +274,36 @@ async function run(overrides = {}) {
       shouldFail: gate.shouldFail,
     });
 
+    // 9. Output to GitHub Step Summary ($GITHUB_STEP_SUMMARY) and Action Outputs
+    if (jobSummaryMode !== 'none') {
+      const summaryBody =
+        jobSummaryMode === 'compact'
+          ? generateCompactJobSummary({
+              engine,
+              issueCount: gate.issueCount,
+              highestSeverity: gate.highestSeverity,
+              reportPath: 'sql-optima-report.md',
+            })
+          : summaryReport;
+      try {
+        await core.summary.addRaw(summaryBody).write();
+      } catch (summaryError) {
+        log.warn('Failed to write GitHub Step Summary; full report is in sql-optima-report.md', {
+          engine,
+          phase: 'report',
+          jobSummary: jobSummaryMode,
+          error: summaryError.message,
+        });
+      }
+    } else {
+      log.info('Skipping GitHub Step Summary (job_summary=none)', {
+        engine,
+        phase: 'report',
+      });
+    }
+    // Keep the Action output compact — large scripts exceed GitHub output limits.
+    core.setOutput('report', summaryReport);
+    core.setOutput('report_path', 'sql-optima-report.md');
     core.setOutput('issue_count', String(gate.issueCount));
     core.setOutput('highest_severity', gate.highestSeverity);
 
