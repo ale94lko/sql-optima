@@ -402,5 +402,36 @@ describe('MySQLAnalyzer', () => {
     await expect(analyzer.testConnection()).rejects.toThrow('MySQL Connection Failed: timeout');
     expect(connection.release).toHaveBeenCalled();
   });
+
+  it('forwards log calls when a structured logger is injected', async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    connection.query.mockResolvedValue([[{ 1: 1 }]]);
+    const analyzer = new MySQLAnalyzer({}, { pool, logger });
+
+    await expect(analyzer.testConnection()).resolves.toBe(true);
+    expect(logger.debug).toHaveBeenCalledWith(
+      'MySQL pool connect',
+      expect.objectContaining({ engine: 'mysql', phase: 'connect' }),
+    );
+
+    connection.query.mockResolvedValue([[{ EXPLAIN: { query_block: {} } }]]);
+    await analyzer.analyzeQuery('SELECT 1;');
+    expect(logger.info).toHaveBeenCalledWith(
+      'MySQL dynamic analysis',
+      expect.objectContaining({ engine: 'mysql', phase: 'dynamic' }),
+    );
+  });
+
+  it('close is a no-op when the pool was already ended', async () => {
+    const analyzer = new MySQLAnalyzer({}, { pool });
+    await analyzer.close();
+    await expect(analyzer.close()).resolves.toBeUndefined();
+    expect(pool.end).toHaveBeenCalledTimes(1);
+  });
 });
 

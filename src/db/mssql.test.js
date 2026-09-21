@@ -388,5 +388,22 @@ describe('MssqlAnalyzer', () => {
     );
     expect(issues).toEqual([]);
   });
+
+  it('forwards log calls when a structured logger is injected', async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    request.query.mockResolvedValue({ recordset: [] });
+    const analyzer = new MssqlAnalyzer({}, { pool, sql: sqlModule, logger });
+
+    await expect(analyzer.testConnection()).resolves.toBe(true);
+    expect(logger.debug).toHaveBeenCalledWith(
+      'SQL Server pool connect',
+      expect.objectContaining({ engine: 'mssql', phase: 'connect' }),
+    );
+  });
 });
 

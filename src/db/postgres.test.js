@@ -197,5 +197,75 @@ describe('PostgresAnalyzer', () => {
     analyzer.inspectPlanNode(null, issues);
     expect(issues).toEqual([]);
   });
+
+  it('forwards log calls when a structured logger is injected', async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    client.query.mockResolvedValue({ rows: [] });
+    const analyzer = new PostgresAnalyzer({}, { pool, logger });
+
+    await expect(analyzer.testConnection()).resolves.toBe(true);
+    expect(logger.debug).toHaveBeenCalledWith(
+      'PostgreSQL pool connect',
+      expect.objectContaining({ engine: 'postgres', phase: 'connect' }),
+    );
+
+    await analyzer.analyzeQuery('SELECT 1;');
+    expect(logger.info).toHaveBeenCalledWith(
+      'PostgreSQL dynamic analysis',
+      expect.objectContaining({ engine: 'postgres', phase: 'dynamic' }),
+    );
+  });
+
+  it('treats empty EXPLAIN rows as a successful empty plan', async () => {
+    client.query.mockResolvedValue({ rows: [] });
+    const analyzer = new PostgresAnalyzer({}, { pool });
+    const result = await analyzer.analyzeQuery('SELECT 1;');
+
+    expect(result.executed).toBe(true);
+    expect(result.executionTimeMs).toBeNull();
+    expect(result.planningTimeMs).toBeNull();
+    expect(result.totalCost).toBeNull();
+    expect(result.issues).toEqual([]);
+    expect(result.rawPlan).toBeNull();
+  });
+
+  it('skips Nested Loop findings when actual time is low', () => {
+    const analyzer = new PostgresAnalyzer({}, { pool });
+    const issues = [];
+    analyzer.inspectPlanNode(
+      {
+        'Node Type': 'Nested Loop',
+        'Actual Total Time': 10,
+        'Total Cost': 5,
+      },
+      issues,
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it('keeps SCHEMA_APPLY_ERROR when EXPLAIN fails after a schema apply error', async () => {
+    client.query
+      .mockRejectedValueOnce(new Error('syntax error'))
+      .mockRejectedValueOnce(new Error('relation missing'));
+
+    const analyzer = new PostgresAnalyzer({}, { pool });
+    const result = await analyzer.analyzeQuery(`
+      CREATE TABLE bad (;
+      SELECT * FROM missing;
+    `);
+
+    expect(result.executed).toBe(false);
+    expect(result.issues.map((issue) => issue.type)).toEqual([
+      'SCHEMA_APPLY_ERROR',
+      'EXPLAIN_EXECUTION_ERROR',
+    ]);
+    expect(result.issues[0].severity).toBe('MEDIUM');
+    expect(result.issues[1].severity).toBe('HIGH');
+  });
 });
 
