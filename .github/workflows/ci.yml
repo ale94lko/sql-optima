@@ -51,7 +51,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: coverage-unit
           path: |
@@ -81,8 +81,8 @@ jobs:
           # Ignore executable-bit noise on copied binaries across hosts.
           git config core.fileMode false
           npm run build
-          if [ ! -f dist/sql-wasm.wasm ]; then
-            echo "::error::dist/sql-wasm.wasm was not generated. Check scripts/copy-sqljs-wasm.js."
+          if [ ! -f dist/sql-wasm.wasm ] || [ ! -f dist/sql-wasm.js ]; then
+            echo "::error::dist/sql-wasm.js / sql-wasm.wasm were not generated. Check scripts/copy-sqljs-wasm.js."
             exit 1
           fi
           if ! git diff --exit-code -- dist; then
@@ -126,6 +126,25 @@ jobs:
           echo "${ACTIONLINT_LINUX_AMD64_SHA256}  ${ARCHIVE}" | sha256sum -c -
           tar -xzf "$ARCHIVE" actionlint
           ./actionlint -color
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck JSDoc
+        run: npm run typecheck
 
   # Default-path live engines (eval / merge-blocking). Per-engine jobs below stay as-is.
   # Credentials are job env only (in-container services; no GitHub secrets / external DBs).

@@ -12,7 +12,9 @@ const {
   validateEngine,
   validateDbPort,
   validateActionInputs,
+  resolveSqlFileWithinWorkspace,
 } = require('./inputValidation');
+const path = require('node:path');
 
 describe('inputValidation', () => {
   it('accepts a valid engine (case-insensitive)', () => {
@@ -68,5 +70,43 @@ describe('inputValidation', () => {
     });
     expect(validateActionInputs({ engine: 'oracle', dbPort: '5432' }).ok).toBe(false);
     expect(validateActionInputs({ engine: 'postgres', dbPort: 'nope' }).ok).toBe(false);
+  });
+
+  describe('resolveSqlFileWithinWorkspace', () => {
+    const workspaceRoot = path.resolve('/tmp/sql-optima-workspace');
+
+    it('accepts a relative path inside the workspace', () => {
+      const result = resolveSqlFileWithinWorkspace('examples/query.sql', {
+        workspaceRoot,
+        pathModule: path,
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.resolvedPath).toBe(path.resolve(workspaceRoot, 'examples/query.sql'));
+      }
+    });
+
+    it('rejects relative traversal outside the workspace', () => {
+      const result = resolveSqlFileWithinWorkspace('../secret.sql', {
+        workspaceRoot,
+        pathModule: path,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('sql_file must be inside the workspace');
+      }
+    });
+
+    it('rejects an absolute path outside the workspace', () => {
+      const outside = path.resolve('/etc/passwd');
+      const result = resolveSqlFileWithinWorkspace(outside, {
+        workspaceRoot,
+        pathModule: path,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('sql_file must be inside the workspace');
+      }
+    });
   });
 });

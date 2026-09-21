@@ -97,10 +97,39 @@ function validateActionInputs(inputs = {}) {
     return engineResult;
   }
   const portResult = validateDbPort(inputs.dbPort);
-  if (!portResult.ok) {
+  if (portResult.ok === false) {
     return portResult;
   }
   return { ok: true, engine: engineResult.engine, port: portResult.port };
+}
+
+/**
+ * Resolves `sql_file` and ensures it stays inside the Action workspace (CWE-22).
+ *
+ * @param {string} sqlFile
+ * @param {Object} [options]
+ * @param {string} [options.workspaceRoot] - Defaults to GITHUB_WORKSPACE or cwd.
+ * @param {typeof import('path')} [options.pathModule] - Injected path module for tests.
+ * @returns {{ ok: true, resolvedPath: string, workspaceRoot: string } | { ok: false, error: string }}
+ */
+function resolveSqlFileWithinWorkspace(sqlFile, options = {}) {
+  const pathMod = options.pathModule || require('path');
+  const rawRoot =
+    options.workspaceRoot !== undefined && options.workspaceRoot !== null
+      ? options.workspaceRoot
+      : process.env.GITHUB_WORKSPACE || process.cwd();
+  const workspaceRoot = pathMod.resolve(String(rawRoot));
+  const resolvedPath = pathMod.resolve(workspaceRoot, String(sqlFile || ''));
+  const relative = pathMod.relative(workspaceRoot, resolvedPath);
+
+  if (relative.startsWith('..') || pathMod.isAbsolute(relative)) {
+    return {
+      ok: false,
+      error: `sql_file must be inside the workspace: ${sqlFile}`,
+    };
+  }
+
+  return { ok: true, resolvedPath, workspaceRoot };
 }
 
 module.exports = {
@@ -109,4 +138,5 @@ module.exports = {
   validateEngine,
   validateDbPort,
   validateActionInputs,
+  resolveSqlFileWithinWorkspace,
 };
