@@ -14,8 +14,6 @@ on:
 
 permissions:
   issues: write
-  # Reaction ack (+1) on the command comment.
-  reactions: write
 
 concurrency:
   group: self-assign-${{ github.event.issue.number }}
@@ -69,22 +67,16 @@ jobs:
                 assignees: [commenter],
               });
               core.info(`Unassigned ${commenter} from #${common.issue_number}`);
-            } else {
-              // Self-assign only (ignore @mentions for now — keeps the surface small).
-              if (current.includes(commenter)) {
-                core.info(`${commenter} already assigned`);
-              } else {
-                await github.rest.issues.addAssignees({
-                  ...common,
-                  assignees: [commenter],
-                });
-                core.info(`Assigned ${commenter} to #${common.issue_number}`);
-              }
+              return;
             }
 
-            await github.rest.reactions.createForIssueComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: context.payload.comment.id,
-              content: '+1',
+            // Self-assign only (ignore @mentions for now — keeps the surface small).
+            if (current.includes(commenter)) {
+              core.info(`${commenter} already assigned`);
+              return;
+            }
+            await github.rest.issues.addAssignees({
+              ...common,
+              assignees: [commenter],
             });
+            core.info(`Assigned ${commenter} to #${common.issue_number}`);
