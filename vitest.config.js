@@ -10,6 +10,8 @@ const { defineConfig } = require('vitest/config');
 module.exports = defineConfig({
   test: {
     environment: 'node',
+    // Default suite is offline: src/** and scripts/** tests use mocks / in-memory
+    // sql.js only. Live DB coverage is `npm run integration` + CI integration* jobs.
     include: ['src/**/*.test.js', 'scripts/**/*.test.js'],
     coverage: {
       provider: 'v8',

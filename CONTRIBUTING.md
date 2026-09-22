@@ -43,9 +43,11 @@ See [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md) for how reviews are conducted, wh
 ## Testing policy (required)
 
 As major new functionality is added, **automated tests MUST be added** to the
-Vitest suite (`npm test` / `npm run test:coverage`). Pull requests that change
-behavior without tests should explain why coverage is deferred and will usually
-be asked to add tests before merge.
+Vitest suite (`npm test` / `npm run test:coverage`). That default suite is
+**offline** (mocked DB adapters / in-memory sql.js) — see
+[README — Running tests without a database](README.md#running-tests-without-a-database).
+Pull requests that change behavior without tests should explain why coverage is
+deferred and will usually be asked to add tests before merge.
 
 ### Coverage thresholds (enforced)
 

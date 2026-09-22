@@ -3,6 +3,12 @@
  * SPDX-License-Identifier: MIT
  */
 
+/**
+ * Unit tests for the live-integration CI helper.
+ * Fully offline: every case injects a mocked `runFn` and never opens a DB socket.
+ * Live engines are exercised only by `node scripts/run-integration.js` in CI.
+ */
+
 import { describe, it, expect, vi } from 'vitest';
 import { createRequire } from 'node:module';
 

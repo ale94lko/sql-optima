@@ -467,6 +467,16 @@ npm run test:coverage   # fails the process (and CI `unit`) if floors in vitest.
 npm run build
 ```
 
+### Running tests without a database
+
+`npm test` and `npm run test:coverage` (Vitest) are **fully offline**. They do not start Docker, open sockets to Postgres/MySQL/MariaDB/SQL Server, or read live credentials.
+
+- Analyzer unit tests under `src/db/*.test.js` inject mocked pools/clients; they never call the real `pg` / `mysql2` / `mssql` drivers against a server.
+- SQLite coverage uses in-process **sql.js** (WASM from `node_modules`) — still no network service.
+- `scripts/run-integration.test.js` exercises the CI helper with a mocked `runFn` / `@actions/core`; live engines are only used when CI (or you) invoke `node scripts/run-integration.js` with `INPUT_*` env against real containers.
+
+Coverage floors stay in [`vitest.config.js`](vitest.config.js) (statements/functions/lines ≥90%, branches ≥80%). Live multi-engine checks remain separate `integration*` jobs in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — see [CONTRIBUTING.md](CONTRIBUTING.md#continuous-integration).
+
 CI on pull requests runs unit tests, lint (ESLint + actionlint), a `dist/` freshness check, and multi-engine integration jobs — see [CONTRIBUTING.md](CONTRIBUTING.md#continuous-integration).
 
 ---
