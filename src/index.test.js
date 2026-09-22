@@ -108,6 +108,12 @@ describe('run', () => {
     };
   }
 
+  /** Parse the latest structured error JSON line written via core.error. */
+  function lastFailureLog() {
+    expect(core.error).toHaveBeenCalled();
+    return JSON.parse(core.error.mock.calls[core.error.mock.calls.length - 1][0]);
+  }
+
   it('uses sql_content from repository_dispatch when sql_code and inputs are absent', async () => {
     core.getInput.mockImplementation((name) => {
       if (name === 'engine') return 'mariadb';
@@ -135,6 +141,12 @@ describe('run', () => {
     expect(core.setFailed).toHaveBeenCalledWith(
       expect.stringContaining('No SQL content provided to analyze'),
     );
+    expect(lastFailureLog()).toMatchObject({
+      level: 'error',
+      type: 'MissingSqlError',
+      engine: 'postgres',
+      phase: 'load',
+    });
     expect(analyzeStaticSQL).not.toHaveBeenCalled();
   });
 
@@ -271,6 +283,7 @@ describe('run', () => {
   it('fails when a live engine is missing db_password', async () => {
     for (const engine of ['postgres', 'mysql', 'mssql']) {
       core.setFailed.mockClear();
+      core.error.mockClear();
       PostgresAnalyzer.mockClear();
       MySQLAnalyzer.mockClear();
       MssqlAnalyzer.mockClear();
@@ -285,6 +298,12 @@ describe('run', () => {
       expect(core.setFailed).toHaveBeenCalledWith(
         expect.stringContaining('db_password is required'),
       );
+      expect(lastFailureLog()).toMatchObject({
+        level: 'error',
+        type: 'MissingPasswordError',
+        engine,
+        phase: 'connect',
+      });
       expect(PostgresAnalyzer).not.toHaveBeenCalled();
       expect(MySQLAnalyzer).not.toHaveBeenCalled();
       expect(MssqlAnalyzer).not.toHaveBeenCalled();
@@ -420,6 +439,12 @@ describe('run', () => {
     expect(core.setFailed).toHaveBeenCalledWith(
       expect.stringMatching(/Unknown engine "oracle".*Allowed values:/),
     );
+    expect(lastFailureLog()).toMatchObject({
+      level: 'error',
+      type: 'InputValidationError',
+      engine: 'oracle',
+      phase: 'validate',
+    });
     expect(analyzeStaticSQL).not.toHaveBeenCalled();
     expect(generateMarkdownReport).not.toHaveBeenCalled();
     expect(PostgresAnalyzer).not.toHaveBeenCalled();
@@ -565,6 +590,14 @@ describe('run', () => {
     expect(core.setFailed).toHaveBeenCalledWith(
       expect.stringContaining('fail_on_severity=high'),
     );
+    expect(lastFailureLog()).toMatchObject({
+      level: 'error',
+      type: 'SeverityGateError',
+      engine: 'postgres',
+      phase: 'gate',
+      highestSeverity: 'HIGH',
+      issueCount: 1,
+    });
   });
 
   it('fails the action when findings match fail_on_types', async () => {

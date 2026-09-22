@@ -92958,14 +92958,31 @@ async function run(overrides = {}) {
   const { validateActionInputs, resolveSqlFileWithinWorkspace } = inputValidation;
   const severityGate = overrides.severityGate || __nccwpck_require__(59781);
   const { evaluateSeverityGate } = severityGate;
-  const { createLogger } = overrides.loggerModule || __nccwpck_require__(78033);
+  const loggerModule = overrides.loggerModule || __nccwpck_require__(78033);
+  const { createLogger, failAction } = loggerModule;
   const log = overrides.logger || createLogger({ core });
 
   let dbAnalyzer = null;
+  // Hoisted so the catch-all failure path can include engine in telemetry.
+  let engine = 'unknown';
+
+  /**
+   * Log structured failure fields, then `core.setFailed`.
+   * @param {string} message
+   * @param {{ type: string, phase: string } & Record<string, unknown>} fields
+   */
+  function fail(message, fields) {
+    failAction({
+      core,
+      log,
+      message,
+      fields: { engine, ...fields },
+    });
+  }
 
   try {
     // 1. Extract inputs from GitHub Actions environment
-    let engine = core.getInput('engine') || 'postgres';
+    engine = core.getInput('engine') || 'postgres';
     const sqlFile = (core.getInput('sql_file') || '').trim();
     const sqlContentInput = core.getInput('sql_content') || '';
 
@@ -92982,7 +92999,10 @@ async function run(overrides = {}) {
     const dbPortInput = (core.getInput('db_port') || '').trim();
     const inputCheck = validateActionInputs({ engine, dbPort: dbPortInput });
     if (!inputCheck.ok) {
-      core.setFailed(inputCheck.error);
+      fail(inputCheck.error, {
+        type: 'InputValidationError',
+        phase: 'validate',
+      });
       return;
     }
     engine = inputCheck.engine;
@@ -92991,7 +93011,10 @@ async function run(overrides = {}) {
     try {
       jobSummaryMode = normalizeJobSummaryMode(core.getInput('job_summary') || 'full');
     } catch (modeError) {
-      core.setFailed(modeError.message);
+      fail(modeError.message, {
+        type: 'InputValidationError',
+        phase: 'validate',
+      });
       return;
     }
 
@@ -93003,12 +93026,20 @@ async function run(overrides = {}) {
         workspaceRoot: process.env.GITHUB_WORKSPACE || process.cwd(),
       });
       if (!pathCheck.ok) {
-        core.setFailed(pathCheck.error);
+        fail(pathCheck.error, {
+          type: 'SqlPathError',
+          phase: 'load',
+          sqlFile,
+        });
         return;
       }
       const resolvedPath = pathCheck.resolvedPath;
       if (!fs.existsSync(resolvedPath)) {
-        core.setFailed(`SQL file not found: ${sqlFile}`);
+        fail(`SQL file not found: ${sqlFile}`, {
+          type: 'SqlFileNotFoundError',
+          phase: 'load',
+          sqlFile,
+        });
         return;
       }
       sqlContent = fs.readFileSync(resolvedPath, 'utf8');
@@ -93025,8 +93056,12 @@ async function run(overrides = {}) {
     }
 
     if (!sqlContent || sqlContent.trim() === '') {
-      core.setFailed(
+      fail(
         'No SQL content provided to analyze. Pass "sql_file", "sql_content", or a repository_dispatch payload.',
+        {
+          type: 'MissingSqlError',
+          phase: 'load',
+        },
       );
       return;
     }
@@ -93054,8 +93089,12 @@ async function run(overrides = {}) {
     const defaults = resolveEngineDefaults(engine);
     const password = (core.getInput('db_password') || '').trim();
     if (requiresLivePassword(engine) && !password) {
-      core.setFailed(
+      fail(
         `db_password is required for live engine "${engine}". Pass it as an Action input; sql-optima does not embed default database passwords.`,
+        {
+          type: 'MissingPasswordError',
+          phase: 'connect',
+        },
       );
       return;
     }
@@ -93232,7 +93271,12 @@ async function run(overrides = {}) {
     core.setOutput('highest_severity', gate.highestSeverity);
 
     if (gate.shouldFail) {
-      core.setFailed(gate.reason);
+      fail(gate.reason, {
+        type: 'SeverityGateError',
+        phase: 'gate',
+        issueCount: gate.issueCount,
+        highestSeverity: gate.highestSeverity,
+      });
       return;
     }
 
@@ -93243,11 +93287,11 @@ async function run(overrides = {}) {
       highestSeverity: gate.highestSeverity,
     });
   } catch (error) {
-    log.error('SQL Optima Action failed', {
+    fail(`SQL Optima Action failed: ${error.message}`, {
+      type: 'UnhandledError',
       phase: 'error',
       error: error.message,
     });
-    core.setFailed(`SQL Optima Action failed: ${error.message}`);
   } finally {
     // Gracefully release Database connection pool
     if (dbAnalyzer) {
@@ -93525,7 +93569,51 @@ function createLogger(options = {}) {
     info: (message, fields) => emit('info', message, fields),
     warn: (message, fields) => emit('warn', message, fields),
     error: (message, fields) => emit('error', message, fields),
+    /**
+     * Structured failure telemetry for Action `setFailed` paths.
+     * Always includes type, engine, phase, and message (credentials redacted).
+     *
+     * @param {{ type: string, engine?: string|null, phase: string, message: string } & Record<string, unknown>} fields
+     */
+    failure: (fields = {}) => {
+      const {
+        type = 'ActionFailure',
+        engine = null,
+        phase = 'error',
+        message = '',
+        ...rest
+      } = fields;
+      emit('error', message, {
+        type,
+        engine,
+        phase,
+        message: String(message ?? ''),
+        ...rest,
+      });
+    },
   };
+}
+
+/**
+ * Emit structured failure telemetry then mark the Action as failed.
+ * Prefer this over bare `core.setFailed` so JSON error fields stay consistent.
+ *
+ * @param {Object} args
+ * @param {Pick<typeof import('@actions/core'), 'setFailed'>} args.core
+ * @param {{ failure: (fields: Record<string, unknown>) => void }} args.log
+ * @param {string} args.message
+ * @param {{ type: string, engine?: string|null, phase: string } & Record<string, unknown>} args.fields
+ */
+function failAction({ core, log, message, fields }) {
+  const { type, engine = null, phase, message: _ignored, ...rest } = fields;
+  log.failure({
+    type,
+    engine,
+    phase,
+    message,
+    ...rest,
+  });
+  core.setFailed(message);
 }
 
 module.exports = {
@@ -93533,6 +93621,7 @@ module.exports = {
   redactFields,
   formatLogLine,
   createLogger,
+  failAction,
 };
 
 

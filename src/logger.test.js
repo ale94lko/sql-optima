@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { createLogger, redactFields, formatLogLine } = require('./logger');
+const { createLogger, redactFields, formatLogLine, failAction } = require('./logger');
 
 describe('redactFields', () => {
   it('redacts password-like keys and connection strings', () => {
@@ -130,5 +130,68 @@ describe('createLogger', () => {
       db_password: '[REDACTED]',
       connectionString: '[REDACTED]',
     });
+  });
+
+  it('failure() always emits type, engine, phase, and message', () => {
+    const core = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    };
+    const sink = vi.fn();
+    const log = createLogger({ core, sink });
+
+    log.failure({
+      type: 'SeverityGateError',
+      engine: 'postgres',
+      phase: 'gate',
+      message: 'fail_on_severity=high matched',
+      issueCount: 2,
+    });
+
+    expect(JSON.parse(core.error.mock.calls[0][0])).toEqual({
+      level: 'error',
+      msg: 'fail_on_severity=high matched',
+      type: 'SeverityGateError',
+      engine: 'postgres',
+      phase: 'gate',
+      message: 'fail_on_severity=high matched',
+      issueCount: 2,
+    });
+    expect(sink.mock.calls[0][0].fields).toMatchObject({
+      type: 'SeverityGateError',
+      engine: 'postgres',
+      phase: 'gate',
+      message: 'fail_on_severity=high matched',
+    });
+  });
+});
+
+describe('failAction', () => {
+  it('logs structured failure fields then calls core.setFailed', () => {
+    const core = { setFailed: vi.fn() };
+    const log = { failure: vi.fn() };
+
+    failAction({
+      core,
+      log,
+      message: 'Invalid db_port "abc"',
+      fields: {
+        type: 'InputValidationError',
+        engine: 'mysql',
+        phase: 'validate',
+        password: 'should-not-reach-logger-as-plain',
+      },
+    });
+
+    expect(log.failure).toHaveBeenCalledWith({
+      type: 'InputValidationError',
+      engine: 'mysql',
+      phase: 'validate',
+      message: 'Invalid db_port "abc"',
+      password: 'should-not-reach-logger-as-plain',
+    });
+    expect(core.setFailed).toHaveBeenCalledWith('Invalid db_port "abc"');
   });
 });

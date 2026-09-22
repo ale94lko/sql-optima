@@ -106,7 +106,51 @@ function createLogger(options = {}) {
     info: (message, fields) => emit('info', message, fields),
     warn: (message, fields) => emit('warn', message, fields),
     error: (message, fields) => emit('error', message, fields),
+    /**
+     * Structured failure telemetry for Action `setFailed` paths.
+     * Always includes type, engine, phase, and message (credentials redacted).
+     *
+     * @param {{ type: string, engine?: string|null, phase: string, message: string } & Record<string, unknown>} fields
+     */
+    failure: (fields = {}) => {
+      const {
+        type = 'ActionFailure',
+        engine = null,
+        phase = 'error',
+        message = '',
+        ...rest
+      } = fields;
+      emit('error', message, {
+        type,
+        engine,
+        phase,
+        message: String(message ?? ''),
+        ...rest,
+      });
+    },
   };
+}
+
+/**
+ * Emit structured failure telemetry then mark the Action as failed.
+ * Prefer this over bare `core.setFailed` so JSON error fields stay consistent.
+ *
+ * @param {Object} args
+ * @param {Pick<typeof import('@actions/core'), 'setFailed'>} args.core
+ * @param {{ failure: (fields: Record<string, unknown>) => void }} args.log
+ * @param {string} args.message
+ * @param {{ type: string, engine?: string|null, phase: string } & Record<string, unknown>} args.fields
+ */
+function failAction({ core, log, message, fields }) {
+  const { type, engine = null, phase, message: _ignored, ...rest } = fields;
+  log.failure({
+    type,
+    engine,
+    phase,
+    message,
+    ...rest,
+  });
+  core.setFailed(message);
 }
 
 module.exports = {
@@ -114,4 +158,5 @@ module.exports = {
   redactFields,
   formatLogLine,
   createLogger,
+  failAction,
 };
