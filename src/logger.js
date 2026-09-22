@@ -110,7 +110,7 @@ function createLogger(options = {}) {
      * Structured failure telemetry for Action `setFailed` paths.
      * Always includes type, engine, phase, and message (credentials redacted).
      *
-     * @param {{ type: string, engine?: string|null, phase: string, message: string } & Record<string, unknown>} fields
+     * @param {{ type?: string, engine?: string|null, phase?: string, message?: string } & Record<string, unknown>} [fields]
      */
     failure: (fields = {}) => {
       const {
@@ -142,13 +142,10 @@ function createLogger(options = {}) {
  * @param {{ type: string, engine?: string|null, phase: string } & Record<string, unknown>} args.fields
  */
 function failAction({ core, log, message, fields }) {
-  const { type, engine = null, phase, message: _ignored, ...rest } = fields;
   log.failure({
-    type,
-    engine,
-    phase,
+    ...fields,
+    engine: fields.engine ?? null,
     message,
-    ...rest,
   });
   core.setFailed(message);
 }
