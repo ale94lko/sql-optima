@@ -67,9 +67,12 @@ describe('inputValidation', () => {
       ok: true,
       engine: 'mysql',
       port: 3306,
+      sqlFile: '',
+      jobSummary: 'full',
     });
     expect(validateActionInputs({ engine: 'oracle', dbPort: '5432' }).ok).toBe(false);
     expect(validateActionInputs({ engine: 'postgres', dbPort: 'nope' }).ok).toBe(false);
+    expect(validateActionInputs({ engine: 'postgres', jobSummary: 'verbose' }).ok).toBe(false);
   });
 
   describe('resolveSqlFileWithinWorkspace', () => {

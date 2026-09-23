@@ -25,7 +25,6 @@ async function run(overrides = {}) {
   const {
     generateMarkdownReport,
     generateCompactJobSummary,
-    normalizeJobSummaryMode,
   } = formatter;
   const sqlUtils = overrides.sqlUtils || require('./sqlUtils');
   const { resolveEngineDefaults, isStaticOnlyEngine, requiresLivePassword, splitStatements } =
@@ -73,7 +72,14 @@ async function run(overrides = {}) {
 
     engine = String(engine || 'postgres').trim().toLowerCase();
     const dbPortInput = (core.getInput('db_port') || '').trim();
-    const inputCheck = validateActionInputs({ engine, dbPort: dbPortInput });
+    const sqlFileRaw = sqlFile;
+    const jobSummaryRaw = core.getInput('job_summary') || 'full';
+    const inputCheck = validateActionInputs({
+      engine,
+      dbPort: dbPortInput,
+      sqlFile: sqlFileRaw,
+      jobSummary: jobSummaryRaw,
+    });
     if (!inputCheck.ok) {
       fail(inputCheck.error, {
         type: 'InputValidationError',
@@ -82,17 +88,7 @@ async function run(overrides = {}) {
       return;
     }
     engine = inputCheck.engine;
-
-    let jobSummaryMode;
-    try {
-      jobSummaryMode = normalizeJobSummaryMode(core.getInput('job_summary') || 'full');
-    } catch (modeError) {
-      fail(modeError.message, {
-        type: 'InputValidationError',
-        phase: 'validate',
-      });
-      return;
-    }
+    const jobSummaryMode = inputCheck.jobSummary;
 
     // 3. Resolve SQL source: sql_file > sql_content > repository_dispatch payload
     let sqlContent = '';
