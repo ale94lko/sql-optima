@@ -40,10 +40,10 @@
   "dependencies": {
     "@actions/core": "^2.0.3",
     "@actions/github": "^8.0.1",
-    "mssql": "^12.7.2",
-    "mysql2": "^3.9.0",
+    "mssql": "^12.7.4",
+    "mysql2": "^3.24.5",
     "node-sql-parser": "^5.1.0",
-    "pg": "^8.11.3",
+    "pg": "^8.23.1",
     "sql.js": "^1.14.2",
     "zod": "^3.25.76"
   },
