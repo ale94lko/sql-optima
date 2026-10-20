@@ -22,9 +22,11 @@ concurrency:
 jobs:
   validate:
     name: PR & branch standards
+    # Skip Dependabot PRs even when a human synchronizes the branch (actor != bot).
     if: >
       github.actor != 'dependabot[bot]' &&
-      github.actor != 'github-actions[bot]'
+      github.actor != 'github-actions[bot]' &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Validate branch name and PR title
