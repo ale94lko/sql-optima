@@ -63,7 +63,9 @@ class PostgresAnalyzer {
       await client.query('SELECT 1;');
       return true;
     } catch (error) {
-      throw new Error(`PostgreSQL Connection Failed: ${error.message}`);
+      throw new Error(`PostgreSQL Connection Failed: ${error.message}`, {
+        cause: error,
+      });
     } finally {
       if (client) client.release();
     }

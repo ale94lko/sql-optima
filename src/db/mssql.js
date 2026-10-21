@@ -75,7 +75,9 @@ class MssqlAnalyzer {
       await this.pool.request().query('SELECT 1 AS ok;');
       return true;
     } catch (error) {
-      throw new Error(`SQL Server Connection Failed: ${error.message}`);
+      throw new Error(`SQL Server Connection Failed: ${error.message}`, {
+        cause: error,
+      });
     }
   }
 

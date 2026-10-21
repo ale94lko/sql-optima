@@ -61,7 +61,9 @@ class MySQLAnalyzer {
       await connection.query('SELECT 1;');
       return true;
     } catch (error) {
-      throw new Error(`MySQL Connection Failed: ${error.message}`);
+      throw new Error(`MySQL Connection Failed: ${error.message}`, {
+        cause: error,
+      });
     } finally {
       if (connection) connection.release();
     }
