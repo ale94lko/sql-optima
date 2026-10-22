@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    # @actions/core 3.x is ESM-only and breaks CJS + ncc bundling of this Action.
+    # Keep major bumps ignored until an ESM migration lands (see #121 / 6fc06b7).
+    ignore:
+      - dependency-name: "@actions/core"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-production-minor-patch:
         dependency-type: production
