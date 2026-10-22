@@ -30237,7 +30237,7 @@ function parse(str, options = {}) {
     config.client_encoding = result.searchParams.get('encoding')
     return config
   }
-  const hostname = dummyHost ? '' : result.hostname
+  const hostname = (dummyHost ? '' : result.hostname).replace(/^\[(.+)\]$/, '$1')
   if (!config.host) {
     // Only set the host if there is no equivalent query param.
     config.host = decodeURIComponent(hostname)
@@ -31144,7 +31144,7 @@ class Writer {
             // https://stackoverflow.com/questions/2269063/buffer-growth-strategy
             const newSize = oldBuffer.length + (oldBuffer.length >> 1) + size;
             this.buffer = Buffer.allocUnsafe(newSize);
-            oldBuffer.copy(this.buffer);
+            oldBuffer.copy(this.buffer, 0, 0, this.offset);
         }
     }
     addInt32(num) {
@@ -31205,6 +31205,15 @@ class Writer {
         otherBuffer.copy(this.buffer, this.offset);
         this.offset += otherBuffer.length;
         return this;
+    }
+    /**
+     * Appends an uninitialized block of {@link size} bytes to the buffer and returns its offset.
+     */
+    reserveUnsafe(size) {
+        const offset = this.offset;
+        this.ensure(size);
+        this.offset += size;
+        return offset;
     }
     join(code) {
         if (code) {
@@ -31818,29 +31827,29 @@ const parse = (query) => {
     }
     return writer.flush(80 /* code.parse */);
 };
-const paramWriter = new buffer_writer_1.Writer();
-const writeValues = function (values, valueMapper) {
-    for (let i = 0; i < values.length; i++) {
+const writeValues = function (values, valueMapper, formatsOffset) {
+    const len = values.length;
+    for (let i = 0; i < len; i++) {
         const mappedVal = valueMapper ? valueMapper(values[i], i) : values[i];
+        let formatByte = 0 /* ParamType.STRING */;
         if (mappedVal == null) {
-            // add the param type (string) to the writer
-            writer.addInt16(0 /* ParamType.STRING */);
-            // write -1 to the param writer to indicate null
-            paramWriter.addInt32(-1);
+            // write -1 to indicate null
+            writer.addInt32(-1);
         }
         else if (mappedVal instanceof Buffer) {
-            // add the param type (binary) to the writer
-            writer.addInt16(1 /* ParamType.BINARY */);
+            formatByte = 1 /* ParamType.BINARY */;
             // add the buffer to the param writer
-            paramWriter.addInt32(mappedVal.length);
-            paramWriter.add(mappedVal);
+            writer.addInt32(mappedVal.length);
+            writer.add(mappedVal);
         }
         else {
-            // add the param type (string) to the writer
-            writer.addInt16(0 /* ParamType.STRING */);
             // length prefix + UTF-8 bytes in one pass (Buffer.byteLength computed once)
-            paramWriter.addInt32PrefixedString(mappedVal);
+            writer.addInt32PrefixedString(mappedVal);
         }
+        // beware: `writer` operations can replace `writer.buffer` with a new buffer
+        const buf = writer.buffer;
+        buf[formatsOffset++] = 0;
+        buf[formatsOffset++] = formatByte;
     }
 };
 const bind = (config = {}) => {
@@ -31851,17 +31860,19 @@ const bind = (config = {}) => {
     const values = config.values || emptyArray;
     const len = values.length;
     writer.addCString(portal).addCString(statement);
+    // number of parameter format codes
+    writer.addInt16(len);
+    // space for those codes, filled by `writeValues`
+    const formatsOffset = writer.reserveUnsafe(len * 2);
+    // number of parameter values
     writer.addInt16(len);
     try {
-        writeValues(values, config.valueMapper);
+        writeValues(values, config.valueMapper, formatsOffset);
     }
     catch (err) {
         writer.clear();
-        paramWriter.clear();
         throw err;
     }
-    writer.addInt16(len);
-    writer.add(paramWriter.flush());
     // all results use the same format code
     writer.addInt16(1);
     // format code
@@ -33343,6 +33354,24 @@ class Client extends EventEmitter {
       query._result._types = this._types
     }
 
+    // A query that keeps a portal open across round trips cannot share a pipelined connection: the
+    // queries written behind it are answered out of its portal, so rows land on the wrong query and
+    // the reads that follow fail with 'portal does not exist'. Refuse it instead of corrupting.
+    if (this.pipeline) {
+      const portalQuery =
+        typeof config.submit === 'function' && !(query instanceof Query)
+          ? 'Custom query classes such as pg-cursor and pg-query-stream are'
+          : query.rows
+          ? 'The `rows` option is'
+          : null
+      if (portalQuery) {
+        process.nextTick(() => {
+          query.handleError(new Error(`${portalQuery} not supported in pipeline mode`), this.connection)
+        })
+        return result
+      }
+    }
+
     if (!this._queryable) {
       process.nextTick(() => {
         query.handleError(new Error('Client has encountered a connection error and is not queryable'), this.connection)
@@ -33724,6 +33753,11 @@ class Connection extends EventEmitter {
     const self = this
     const options = {
       socket: self.stream,
+      // tls.connect checks the server identity against `servername`, falling
+      // back to `host` and then to 'localhost'. `servername` must stay unset
+      // for IP addresses (see below), so `host` is needed to keep certificate
+      // validation working when connecting to an IP address.
+      host,
     }
 
     if (self.ssl !== true) {
@@ -33740,6 +33774,7 @@ class Connection extends EventEmitter {
       options.ALPNProtocols = ['postgresql']
     }
 
+    // SNI must not be set to an IP address (RFC 6066 section 3)
     const net = __nccwpck_require__(69278)
     if (net.isIP && net.isIP(host) === 0) {
       options.servername = host
@@ -33822,7 +33857,8 @@ class Connection extends EventEmitter {
   }
 
   sync() {
-    this._ending = true
+    // Sync is the extended-query protocol barrier, not a disconnect.
+    // Only end()/Terminate (and connect-timeout teardown) should set _ending.
     this._send(syncBuffer)
   }
 
@@ -33984,7 +34020,7 @@ function signatureAlgorithmHashFromCertificate(data, index) {
       }
       throw x509Error('unknown hash OID ' + hashOID, data)
     }
-    // Ed25519 -- see https: return//github.com/openssl/openssl/issues/15477
+    // Ed25519 -- see https://github.com/openssl/openssl/issues/15477
     case '1.3.101.110':
     case '1.3.101.112': // ph
       return 'SHA-512'
@@ -34892,7 +34928,7 @@ Client.prototype._pulsePipelinedQueryQueue = function () {
     nativeQueries.push(query)
 
     const values = query.values ? query.values.map(utils.prepareValue) : null
-    const pipelineEntry = { text: query.text, name: query.name }
+    const pipelineEntry = { text: query.text, name: query.name, arrayMode: query._arrayMode }
     if (values) {
       pipelineEntry.values = values
     }
@@ -34906,13 +34942,21 @@ Client.prototype._pulsePipelinedQueryQueue = function () {
     self._pipelineInFlight = false
 
     if (err) {
-      // Total pipeline failure — error all queries
+      // Total pipeline failure. Per-query errors arrive on results[i].err, so reaching here means
+      // the connection itself is gone: mark it unusable and say so, the way the JS client and the
+      // non-pipelined native path both do. Without this the client looks healthy after losing its
+      // backend, a Pool never discards it, and everything routed to it fails one query at a time
+      // for the life of the process.
+      self._connected = false
+      self._queryable = false
       for (let i = 0; i < nativeQueries.length; i++) {
         const q = nativeQueries[i]
         q.native = self.native
         q.handleError(err)
       }
-      self._pulsePipelinedQueryQueue()
+      self._errorAllQueries(err)
+      self.emit('error', err)
+      self.emit('end')
       return
     }
 
@@ -35028,6 +35072,8 @@ const errorFieldMap = {
   sqlState: 'code',
   statementPosition: 'position',
   messagePrimary: 'message',
+  messageDetail: 'detail',
+  messageHint: 'hint',
   context: 'where',
   schemaName: 'schema',
   tableName: 'table',
@@ -35130,7 +35176,7 @@ NativeQuery.prototype.submit = function (client) {
 
     // check if the client has already executed this named query
     // if so...just execute it again - skip the planning phase
-    if (client.namedQueries[this.name]) {
+    if (client.namedQueries[this.name] !== undefined) {
       if (this.text && client.namedQueries[this.name] !== this.text) {
         const err = new Error(`Prepared statements must be unique - '${this.name}' was used for a different statement`)
         return after(err)
@@ -35349,7 +35395,11 @@ class Query extends EventEmitter {
   }
 
   hasBeenParsed(connection) {
-    return this.name && (connection.parsedStatements[this.name] || connection.submittedNamedStatements[this.name])
+    return (
+      this.name &&
+      (connection.parsedStatements[this.name] !== undefined ||
+        connection.submittedNamedStatements[this.name] !== undefined)
+    )
   }
 
   handlePortalSuspended(connection) {
@@ -35684,8 +35734,15 @@ module.exports = TypeOverrides
 
 
 const defaults = __nccwpck_require__(68995)
+const nodeUtils = __nccwpck_require__(39023)
 
 const { isDate } = __nccwpck_require__(98253)
+
+const invalidDateDeprecationNotice = nodeUtils.deprecate(
+  () => {},
+  'Sending an invalid date to Postgres is deprecated and will throw an error in the next major version of pg. Ensure any Date object passed as a query parameter is valid.',
+  'PG_INVALID_DATE'
+)
 
 function escapeElement(elementRepresentation) {
   const escaped = elementRepresentation.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
@@ -35737,6 +35794,9 @@ const prepareValue = function (val, seen) {
       return Buffer.from(val.buffer, val.byteOffset, val.byteLength)
     }
     if (isDate(val)) {
+      if (isNaN(val.getTime())) {
+        invalidDateDeprecationNotice()
+      }
       if (defaults.parseInputDatesAsUTC) {
         return dateToStringUTC(val)
       } else {
@@ -35826,7 +35886,8 @@ function dateToStringUTC(date) {
 
 function normalizeQueryConfig(config, values, callback) {
   // can take in strings or config objects
-  config = typeof config === 'string' ? { text: config } : config
+  // Copy config so normalization does not mutate the caller's object.
+  config = typeof config === 'string' ? { text: config } : cloneQueryConfig(config)
   if (values) {
     if (typeof values === 'function') {
       config.callback = values
@@ -35838,6 +35899,13 @@ function normalizeQueryConfig(config, values, callback) {
     config.callback = callback
   }
   return config
+}
+
+function cloneQueryConfig(config) {
+  if (config == null) {
+    return config
+  }
+  return Object.defineProperties(Object.create(Object.getPrototypeOf(config)), Object.getOwnPropertyDescriptors(config))
 }
 
 // Ported from PostgreSQL 9.2.4 source code in src/interfaces/libpq/fe-exec.c
@@ -122321,7 +122389,8 @@ const staticParser = __nccwpck_require__(70454);
 const ServerStatus = __nccwpck_require__(92609);
 const ConnectionConfig = __nccwpck_require__(6566);
 
-const EmptyPacket = new Packets.Packet(0, Buffer.allocUnsafe(4), 0, 4);
+const createEmptyPacket = () =>
+  new Packets.Packet(0, Buffer.allocUnsafe(4), 0, 4);
 
 // http://dev.mysql.com/doc/internals/en/com-query.html
 class Query extends Command {
@@ -122466,7 +122535,7 @@ class Query extends Command {
       this._localStreamError = new Error(
         `As a result of LOCAL INFILE command server wants to read ${path} file, but as of v2.0 you must provide streamFactory option returning ReadStream.`
       );
-      connection.writePacket(EmptyPacket);
+      connection.writePacket(createEmptyPacket());
       return this.infileOk;
     }
 
@@ -122488,12 +122557,12 @@ class Query extends Command {
     };
     const onEnd = () => {
       connection.removeListener('error', onConnectionError);
-      connection.writePacket(EmptyPacket);
+      connection.writePacket(createEmptyPacket());
     };
     const onError = (err) => {
       this._localStreamError = err;
       connection.removeListener('error', onConnectionError);
-      connection.writePacket(EmptyPacket);
+      connection.writePacket(createEmptyPacket());
     };
     this._unpipeStream = () => {
       connection.stream.removeListener('pause', onPause);
@@ -123589,8 +123658,11 @@ class ConnectionConfig {
 
   static parseUrl(url) {
     const parsedUrl = new URL(url);
+    const { hostname } = parsedUrl;
     const options = {
-      host: decodeURIComponent(parsedUrl.hostname),
+      host: decodeURIComponent(
+        hostname.startsWith('[') ? hostname.slice(1, -1) : hostname
+      ),
       port: parseInt(parsedUrl.port, 10),
       database: decodeURIComponent(parsedUrl.pathname.slice(1)),
       user: decodeURIComponent(parsedUrl.username),
@@ -156618,9 +156690,15 @@ function generateNullableCheck(doc, ctx, schema, accessor, buildsValue = true) {
     doc.write(`}`);
     return outputVar;
 }
+function generateSizeGate(doc, schema, size) {
+    for (const [max, check] of util.sizeCaps(schema._zod.def.checks)) {
+        doc.write(`if (${size} > ${numericOperand(max, check._zod.def.check)}) return INVALID;`);
+    }
+}
 function generateArrayCheck(doc, ctx, schema, accessor, buildsValue = true) {
     const def = schema._zod.def;
     doc.write(`if (!Array.isArray(${accessor})) return INVALID;`);
+    generateSizeGate(doc, schema, `${accessor}.length`);
     // Build a new array with validated/transformed elements.
     const outputVar = buildsValue ? newVar(ctx) : null;
     const iVar = newVar(ctx);
@@ -157084,6 +157162,7 @@ function literalPropertyKey(ctx, key) {
 function generateMapCheck(doc, ctx, schema, accessor) {
     const def = schema._zod.def;
     doc.write(`if (!(${accessor} instanceof Map)) return INVALID;`);
+    generateSizeGate(doc, schema, `${accessor}.size`);
     const outputVar = newVar(ctx);
     const kVar = newVar(ctx);
     const valVar = newVar(ctx);
@@ -157100,6 +157179,7 @@ function generateMapCheck(doc, ctx, schema, accessor) {
 function generateSetCheck(doc, ctx, schema, accessor) {
     const def = schema._zod.def;
     doc.write(`if (!(${accessor} instanceof Set)) return INVALID;`);
+    generateSizeGate(doc, schema, `${accessor}.size`);
     const outputVar = newVar(ctx);
     const valVar = newVar(ctx);
     doc.write(`const ${outputVar} = new Set();`);
@@ -160805,6 +160885,33 @@ exports.$ZodDate = core.$constructor("$ZodDate", (inst, def) => {
         return payload;
     };
 });
+// an oversized container fails its leading size checks before any element is parsed
+function capSize(inst, size) {
+    const caps = util.sizeCaps(inst._zod.def.checks);
+    if (!caps.length)
+        return;
+    const cap = Math.min(...caps.map((c) => c[0]));
+    const parse = inst._zod.parse;
+    inst._zod.parse = (payload, ctx) => {
+        const n = size(payload.value);
+        if (n > cap && !ctx?.skipChecks && ctx?.direction !== "backward") {
+            for (const [max, ch] of util.sizeCaps(inst._zod.def.checks)) {
+                if (n > max && ch._zod.def.when(payload)) {
+                    const start = payload.issues.length;
+                    ch._zod.check(payload);
+                    // the value is still the raw input, so no later check may read it
+                    payload.issues[start].continue = false;
+                    util.attachSchema(payload.issues, start, inst);
+                    return payload;
+                }
+            }
+        }
+        return parse(payload, ctx);
+    };
+}
+const arraySize = (input) => (Array.isArray(input) ? input.length : -1);
+const mapSize = (input) => (input instanceof Map ? input.size : -1);
+const setSize = (input) => (input instanceof Set ? input.size : -1);
 function handleArrayResult(result, final, index) {
     if (result.issues.length) {
         final.issues.push(...util.prefixIssues(index, result.issues));
@@ -160850,6 +160957,7 @@ exports.$ZodArray = core.$constructor("$ZodArray", (inst, def) => {
         }
         return payload; //handleArrayResultsAsync(parseResults, final);
     };
+    capSize(inst, arraySize);
 });
 function handlePropertyResult(result, final, key, input, optin, optout) {
     const isPresent = key in input;
@@ -161887,6 +161995,7 @@ exports.$ZodMap = core.$constructor("$ZodMap", (inst, def) => {
             return Promise.all(proms).then(() => payload);
         return payload;
     };
+    capSize(inst, mapSize);
 });
 function handleMapResult(keyResult, valueResult, final, key, input, inst, ctx) {
     if (keyResult.issues.length) {
@@ -161956,6 +162065,7 @@ exports.$ZodSet = core.$constructor("$ZodSet", (inst, def) => {
             return Promise.all(proms).then(() => payload);
         return payload;
     };
+    capSize(inst, setSize);
 });
 function handleSetResult(result, final) {
     if (result.issues.length) {
@@ -163357,6 +163467,7 @@ exports.aborted = aborted;
 exports.explicitlyAborted = explicitlyAborted;
 exports.prefixIssues = prefixIssues;
 exports.unwrapMessage = unwrapMessage;
+exports.sizeCaps = sizeCaps;
 exports.attachSchema = attachSchema;
 exports.finalizeIssue = finalizeIssue;
 exports.getSizableOrigin = getSizableOrigin;
@@ -163931,6 +164042,20 @@ function unwrapMessage(message) {
     return typeof message === "string" ? message : message?.message;
 }
 /* A check holds no link back to the schema it is attached to — the same check instance is shared by every clone of that schema — so the owner is stamped onto the issues a check just raised, at the only point where both are in scope. Runs on the failure path only; `start` is the issue count from before the check ran. */
+/** The leading size checks of `defChecks` that set an upper bound, each paired with it. */
+function sizeCaps(defChecks) {
+    const caps = [];
+    for (const ch of defChecks ?? []) {
+        const d = ch._zod.def;
+        // a later check may rewrite the value
+        if (!/_(length|size)$|_equals$/.test(d.check))
+            break;
+        const max = d.maximum ?? d.length ?? d.size;
+        if (max >= 0)
+            caps.push([max, ch]);
+    }
+    return caps;
+}
 function attachSchema(issues, start, inst) {
     var _a;
     for (let i = start; i < issues.length; i++) {
@@ -164272,7 +164397,7 @@ exports.version = void 0;
 exports.version = {
     major: 4,
     minor: 6,
-    patch: 5,
+    patch: 7,
 };
 
 // seal-cjs-exports
@@ -179253,7 +179378,7 @@ module.exports = /*#__PURE__*/JSON.parse('[["0","\\u0000",128],["a1","｡",62],[
 /***/ ((module) => {
 
 "use strict";
-module.exports = /*#__PURE__*/JSON.parse('{"name":"mysql2","version":"3.24.4","description":"fast mysql driver. Implements core protocol, prepared statements, ssl and compression in native JS","main":"index.js","typings":"typings/mysql/index","type":"commonjs","scripts":{"lint":"biome lint --error-on-warnings && prettier --check .","lint:fix":"biome lint --write . && prettier --write .","test":"poku","test:bun":"bun poku","test:deno":"deno run -A npm:poku","test:docker:up":"docker compose -f test/docker-compose.yml up --abort-on-container-exit --remove-orphans","test:docker:down":"docker compose -f test/docker-compose.yml down","test:docker:node":"npm run test:docker:up -- node && npm run test:docker:down","test:docker:bun":"npm run test:docker:up -- bun && npm run test:docker:down","test:docker:deno":"npm run test:docker:up -- deno && npm run test:docker:down","test:docker:coverage":"npm run test:docker:up -- coverage && npm run test:docker:down","test:coverage":"c8 npm test","test:build":"rollup -c","typecheck":"cd \\"test/tsc-build\\" && tsc -p \\"tsconfig.json\\" && cd .. && tsc -p \\"tsconfig.json\\" --noEmit","src:typecheck":"tsc -p src/tsconfig.json --noEmit && tsc -p tools/src/tsconfig.json","src:build":"tsx tools/src/clean.mts && tsc -p src/tsconfig.json","src:test":"npm run src:build && tsx tools/src/prepare-tests.mts && poku --config=tools/src/poku.config.mts","src:test:bun":"npm run src:build && tsx tools/src/prepare-tests.mts && bun poku --config=tools/src/poku.config.mts","src:test:deno":"npm run src:build && tsx tools/src/prepare-tests.mts && deno run -A npm:poku --config=tools/src/poku.config.mts","benchmark":"node ./benchmarks/benchmark.js","wait-port":"wait-on"},"repository":{"type":"git","url":"git+https://github.com/sidorares/node-mysql2.git"},"homepage":"https://sidorares.github.io/node-mysql2/docs","keywords":["mysql","client","server"],"files":["lib","typings/mysql","index.js","index.d.ts","promise.js","promise.d.ts"],"exports":{".":"./index.js","./package.json":"./package.json","./promise":"./promise.js","./promise.js":"./promise.js"},"engines":{"node":">= 8.0"},"author":"Andrey Sidorov <andrey.sidorov@gmail.com>","license":"MIT","dependencies":{"aws-ssl-profiles":"^1.1.2","generate-function":"^2.3.1","iconv-lite":"^0.7.3","long":"^5.3.2","lru.min":"^1.1.4","named-placeholders":"^1.1.6","sql-escaper":"^1.5.1"},"peerDependencies":{"@types/node":">= 8"},"devDependencies":{"@biomejs/biome":"^2.5.7","@ianvs/prettier-plugin-sort-imports":"^4.7.1","@pokujs/multi-suite":"^1.0.2","@rollup/plugin-commonjs":"^29.0.3","@rollup/plugin-json":"^6.1.0","@rollup/plugin-node-resolve":"^16.0.3","@types/node":"^26.2.0","assert-diff":"^3.0.4","benchmark":"^2.1.4","c8":"^12.0.0","error-stack-parser":"^2.1.4","poku":"^4.5.0","portfinder":"^1.0.38","prettier":"^3.9.6","rollup":"^4.62.4","tsx":"^4.23.11","typescript":"^7.0.2"}}');
+module.exports = /*#__PURE__*/JSON.parse('{"name":"mysql2","version":"3.24.6","description":"fast mysql driver. Implements core protocol, prepared statements, ssl and compression in native JS","main":"index.js","typings":"typings/mysql/index","type":"commonjs","scripts":{"lint":"biome lint --error-on-warnings && prettier --check .","lint:fix":"biome lint --write . && prettier --write .","test":"poku","test:bun":"bun poku","test:deno":"deno run -A npm:poku","test:docker:up":"docker compose -f test/docker-compose.yml up --abort-on-container-exit --remove-orphans","test:docker:down":"docker compose -f test/docker-compose.yml down","test:docker:node":"npm run test:docker:up -- node && npm run test:docker:down","test:docker:bun":"npm run test:docker:up -- bun && npm run test:docker:down","test:docker:deno":"npm run test:docker:up -- deno && npm run test:docker:down","test:docker:coverage":"npm run test:docker:up -- coverage && npm run test:docker:down","test:coverage":"c8 npm test","test:build":"rollup -c","typecheck":"cd \\"test/tsc-build\\" && tsc -p \\"tsconfig.json\\" && cd .. && tsc -p \\"tsconfig.json\\" --noEmit","src:typecheck":"tsc -p src/tsconfig.json --noEmit && tsc -p tools/src/tsconfig.json","src:build":"tsx tools/src/clean.mts && tsc -p src/tsconfig.json","src:test":"npm run src:build && tsx tools/src/prepare-tests.mts && poku --config=tools/src/poku.config.mts","src:test:bun":"npm run src:build && tsx tools/src/prepare-tests.mts && bun poku --config=tools/src/poku.config.mts","src:test:deno":"npm run src:build && tsx tools/src/prepare-tests.mts && deno run -A npm:poku --config=tools/src/poku.config.mts","benchmark":"node ./benchmarks/benchmark.js","wait-port":"wait-on"},"repository":{"type":"git","url":"git+https://github.com/sidorares/node-mysql2.git"},"homepage":"https://sidorares.github.io/node-mysql2/docs","keywords":["mysql","client","server"],"files":["lib","typings/mysql","index.js","index.d.ts","promise.js","promise.d.ts"],"exports":{".":"./index.js","./package.json":"./package.json","./promise":"./promise.js","./promise.js":"./promise.js"},"engines":{"node":">= 8.0"},"author":"Andrey Sidorov <andrey.sidorov@gmail.com>","license":"MIT","dependencies":{"aws-ssl-profiles":"^1.1.2","generate-function":"^2.3.1","iconv-lite":"^0.7.3","long":"^5.3.2","lru.min":"^1.1.4","named-placeholders":"^1.1.6","sql-escaper":"^1.5.1"},"peerDependencies":{"@types/node":">= 8"},"devDependencies":{"@biomejs/biome":"^2.5.7","@ianvs/prettier-plugin-sort-imports":"^4.7.1","@pokujs/multi-suite":"^1.0.2","@rollup/plugin-commonjs":"^29.0.3","@rollup/plugin-json":"^6.1.0","@rollup/plugin-node-resolve":"^16.0.3","@types/node":"^26.2.0","assert-diff":"^3.0.4","benchmark":"^2.1.4","c8":"^12.0.0","error-stack-parser":"^2.1.4","poku":"^4.5.0","portfinder":"^1.0.38","prettier":"^3.9.6","rollup":"^4.62.4","tsx":"^4.23.11","typescript":"^7.0.2"}}');
 
 /***/ }),
 
